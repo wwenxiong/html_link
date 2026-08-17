@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理后台 - 秒转链接</title>
+    <meta name="robots" content="noindex, nofollow">
+    <!-- Favicon / 网站图标 -->
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <!-- Google Fonts: Plus Jakarta Sans, Inter, JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <!-- Anti-flicker Theme Init Script -->
+    <script>
+        (function() {
+            try {
+                const savedTheme = localStorage.getItem('app_theme');
+                const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                const theme = savedTheme ? savedTheme : (prefersDark ? 'dark' : 'light');
+                document.documentElement.setAttribute('data-theme', theme);
+            } catch (e) {}
+        })();
+    </script>
+</head>
+<body class="admin-page">
+    <!-- Background Effects -->
+    <div class="bg-effects">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <canvas id="antigravityCanvas" class="antigravity-canvas"></canvas>
+    </div>
+
+    <!-- Header -->
+    <header class="glass-header">
+        <div class="container admin-container header-container">
+            <a href="/" class="logo">
+                <span class="logo-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="url(#logoGradAdmin)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="logoGradAdmin" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7C3AED"/><stop offset="100%" stop-color="#06B6D4"/></linearGradient></defs><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>
+                <div class="logo-text">
+                    <h1>秒转链接</h1>
+                    <span class="tagline">管理后台</span>
+                </div>
+            </a>
+            <div class="admin-header-actions" id="adminHeaderActions">
+                <!-- Theme Toggle Button -->
+                <button class="theme-toggle-btn" id="themeToggleBtn" title="切换深色/浅色模式" aria-label="切换深色/浅色模式">
+                    <span class="theme-icon sun-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                    </span>
+                    <span class="theme-icon moon-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                    </span>
+                </button>
+                <div class="admin-auth-actions" id="headerActions" style="display:none;">
+                    <a href="/" class="back-link">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+                        <span>返回前台</span>
+                    </a>
+                    <button class="logout-btn" id="logoutBtn">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                        <span>退出登录</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container admin-container">
+        <div class="admin-hero">
+            <h2>管理后台</h2>
+            <p>卡密使用状态 · 有效时间管理 · 已部署站点 · 云存储配置</p>
+        </div>
+
+        <!-- Login Section -->
+        <div class="login-card glass-panel" id="loginSection">
+            <h3><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -3px; margin-right: 6px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>管理员登录</h3>
+            <p class="login-hint">请输入管理员密码以访问后台</p>
+            <div class="login-form">
+                <input type="password" class="admin-input" id="adminPwdInput" placeholder="请输入管理员密码" autocomplete="current-password">
+                <button class="btn btn-primary btn-large" id="adminLoginBtn">登 录</button>
+            </div>
+        </div>
+
+        <!-- Dashboard (hidden until login) -->
+        <div class="admin-dashboard hidden" id="dashboardSection">
+
+            <!-- Status Bar -->
+            <div class="status-bar" style="margin-bottom: 24px;">
+                <div class="status-card">
+                    <div class="status-label">存储模式</div>
+                    <div class="status-value" id="storageStatus">检测中...</div>
+                </div>
+                <div class="status-card">
+                    <div class="status-label">服务状态</div>
+                    <div class="status-value connected" id="serverStatus">● 运行中</div>
+                </div>
+            </div>
+
+            <div class="admin-grid">
+                <!-- CDKEY Management Overview Card -->
+                <div class="admin-section glass-panel" style="grid-column: span 2;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+                        <div>
+                            <h3 style="margin-bottom: 3px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -3px; margin-right: 6px;"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>部署卡密概览与管理</h3>
+                            <p class="section-desc" style="margin-bottom: 0;">实时追踪系统卡密库存与使用状态，点击下方按钮可打开独立弹窗进行批量生成与深度管理</p>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn btn-primary" id="openCdkeyModalBtn">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 4px;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+                                <span>管理与生成卡密</span>
+                            </button>
+                            <button class="btn btn-outline" id="quickClearExpiredBtn" style="color: var(--accent-error);">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 4px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                                <span>清理过期</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Key Stats -->
+                    <div class="key-stats" style="margin-bottom: 0;">
+                        <div class="key-stat">
+                            <span class="stat-number total" id="statTotal">-</span>
+                            <span class="stat-label">总生成数</span>
+                        </div>
+                        <div class="key-stat">
+                            <span class="stat-number unused" id="statUnused">-</span>
+                            <span class="stat-label">未使用</span>
+                        </div>
+                        <div class="key-stat">
+                            <span class="stat-number used" id="statUsed">-</span>
+                            <span class="stat-label">使用中</span>
+                        </div>
+                        <div class="key-stat">
+                            <span class="stat-number" id="statExpired" style="color: var(--accent-error);">-</span>
+                            <span class="stat-label">已到期</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Deployed Sites Management -->
+                <div class="admin-section glass-panel" style="grid-column: span 2;">
+                    <h3><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -3px; margin-right: 6px;"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>已部署站点列表管理</h3>
+                    <p class="section-desc">管理所有通过本系统托管部署的网页，支持监控生命周期与一键清理</p>
+
+                    <!-- Site Stats -->
+                    <div class="key-stats">
+                        <div class="key-stat">
+                            <span class="stat-number total" id="siteStatTotal">-</span>
+                            <span class="stat-label">总部署站点</span>
+                        </div>
+                        <div class="key-stat">
+                            <span class="stat-number unused" id="siteStatActive">-</span>
+                            <span class="stat-label">正常运行中</span>
+                        </div>
+                        <div class="key-stat">
+                            <span class="stat-number" id="siteStatExpired" style="color: var(--accent-error);">-</span>
+                            <span class="stat-label">已到期失效</span>
+                        </div>
+                        <div class="key-stat">
+                            <span class="stat-number" id="siteStatR2" style="color: var(--mac-blue);">-</span>
+                            <span class="stat-label">Cloudflare R2 存储</span>
+                        </div>
+                    </div>
+
+                    <!-- Filter and Search Bar for Sites -->
+                    <div class="filter-bar">
+                        <div class="filter-tabs" id="siteFilterTabs">
+                            <div class="filter-tab active" data-site-filter="all">全部 (<span id="siteCountAll">0</span>)</div>
+                            <div class="filter-tab" data-site-filter="active">运行中 (<span id="siteCountActive">0</span>)</div>
+                            <div class="filter-tab" data-site-filter="expired">已到期 (<span id="siteCountExpired">0</span>)</div>
+                        </div>
+
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" class="admin-input" id="searchSiteInput" placeholder="搜索域名 / 用户 / 卡密..." style="width: 200px; padding: 6px 10px; font-size: 12px;">
+                            <button class="btn btn-outline btn-sm" id="refreshSitesBtn" style="white-space: nowrap; color: var(--mac-blue);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -1px; margin-right: 2px;"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>刷新列表</button>
+                        </div>
+                    </div>
+
+                    <div class="admin-table-wrapper">
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>域名 / 站点ID</th>
+                                    <th>访问链接</th>
+                                    <th>所属用户</th>
+                                    <th>使用卡密</th>
+                                    <th>有效时长</th>
+                                    <th>存储模式</th>
+                                    <th>部署时间</th>
+                                    <th>到期状态</th>
+                                    <th style="text-align: right;">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="sitesTableBody">
+                                <tr><td colspan="9" style="text-align: center; color: var(--text-secondary); padding: 30px;">加载中...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Unified System Settings Overview Card -->
+                <div class="admin-section glass-panel" style="grid-column: span 2;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+                        <div>
+                            <h3 style="margin-bottom: 3px;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -3px; margin-right: 6px;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                                平台核心服务与存储配置
+                            </h3>
+                            <p class="section-desc" style="margin-bottom: 0;">集中管理用户认证 (Clerk)、Cloudflare R2 对象存储与自定义主域名设置</p>
+                        </div>
+                        <button class="btn btn-primary" id="openSettingsModalBtn">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 4px;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                            <span>配置</span>
+                        </button>
+                    </div>
+
+                    <!-- 3 Quick Status Indicators -->
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+                        <div style="padding: 14px; background: var(--mac-surface); border: 1px solid var(--mac-border); border-radius: 12px; display: flex; align-items: center; gap: 12px;">
+                            <div style="width: 38px; height: 38px; border-radius: 10px; background: rgba(94, 92, 230, 0.15); display: flex; align-items: center; justify-content: center; color: var(--mac-indigo); flex-shrink: 0;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                            </div>
+                            <div>
+                                <div style="font-size: 13px; font-weight: 700; color: var(--text-primary);">Clerk 用户认证</div>
+                                <div style="font-size: 12px; color: var(--text-secondary);" id="overviewClerkStatus">检测中...</div>
+                            </div>
+                        </div>
+                        <div style="padding: 14px; background: var(--mac-surface); border: 1px solid var(--mac-border); border-radius: 12px; display: flex; align-items: center; gap: 12px;">
+                            <div style="width: 38px; height: 38px; border-radius: 10px; background: rgba(10, 132, 255, 0.15); display: flex; align-items: center; justify-content: center; color: var(--mac-blue); flex-shrink: 0;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+                            </div>
+                            <div>
+                                <div style="font-size: 13px; font-weight: 700; color: var(--text-primary);">Cloudflare R2 存储</div>
+                                <div style="font-size: 12px; color: var(--text-secondary);" id="overviewR2Status">检测中...</div>
+                            </div>
+                        </div>
+                        <div style="padding: 14px; background: var(--mac-surface); border: 1px solid var(--mac-border); border-radius: 12px; display: flex; align-items: center; gap: 12px;">
+                            <div style="width: 38px; height: 38px; border-radius: 10px; background: rgba(48, 209, 88, 0.15); display: flex; align-items: center; justify-content: center; color: var(--accent-success); flex-shrink: 0;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                            </div>
+                            <div>
+                                <div style="font-size: 13px; font-weight: 700; color: var(--text-primary);">平台一级主域名</div>
+                                <div style="font-size: 12px; color: var(--text-secondary);" id="overviewDomainStatus">检测中...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- System Settings Modal (系统核心服务配置弹窗) -->
+    <div class="modal-overlay hidden" id="settingsModal" style="z-index: 1050;">
+        <div class="modal-container glass-panel" style="max-width: 800px; max-height: 90vh;">
+            <div class="modal-header">
+                <div class="modal-title-wrap">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                    <h3>平台核心服务与存储配置</h3>
+                </div>
+                <button class="btn-close" id="closeSettingsModalBtn">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 18px;">
+                
+                <!-- Section 1: Clerk -->
+                <div style="background: var(--mac-surface); border: 1px solid var(--mac-border); border-radius: 14px; padding: 18px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                        <h4 style="font-size: 14px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--mac-indigo);"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                            Clerk 用户认证配置
+                        </h4>
+                        <a href="https://dashboard.clerk.com/~/api-keys" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="text-decoration:none; display:inline-flex; align-items:center; gap:4px; font-size: 11.5px;">
+                            <span>获取 Clerk 密钥</span>
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                        </a>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
+                        <div class="form-group" style="margin: 0;">
+                            <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: block;">Publishable Key (公钥)</label>
+                            <input type="text" class="admin-input" id="clerkPublishableKeyInput" placeholder="pk_test_... 或 pk_live_...">
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: block;">Secret Key (私钥)</label>
+                            <input type="password" class="admin-input" id="clerkSecretKeyInput" placeholder="sk_test_... 或 sk_live_...">
+                        </div>
+                    </div>
+                    <button class="btn btn-primary btn-sm" id="saveClerkConfigBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 4px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>保存 Clerk 配置</button>
+                </div>
+
+                <!-- Section 2: Cloudflare R2 -->
+                <div style="background: var(--mac-surface); border: 1px solid var(--mac-border); border-radius: 14px; padding: 18px;">
+                    <h4 style="font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--mac-blue);"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+                        Cloudflare R2 对象存储配置
+                    </h4>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                        <div class="form-group" style="margin: 0;">
+                            <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: block;">Account ID</label>
+                            <input type="text" class="admin-input" id="r2AccountId" placeholder="Cloudflare Account ID">
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: block;">Bucket Name</label>
+                            <input type="text" class="admin-input" id="r2Bucket" placeholder="Bucket 名称">
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                        <div class="form-group" style="margin: 0;">
+                            <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: block;">Access Key ID</label>
+                            <input type="text" class="admin-input" id="r2AccessKey" placeholder="Access Key ID">
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: block;">Secret Access Key</label>
+                            <input type="password" class="admin-input" id="r2SecretKey" placeholder="Secret Access Key">
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 14px;">
+                        <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: block;">Public Domain (公开访问域名)</label>
+                        <input type="text" class="admin-input" id="r2Domain" placeholder="https://pub-xxx.r2.dev 或自定义域名">
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-primary btn-sm" id="saveR2ConfigBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 4px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>保存 R2 配置</button>
+                        <button class="btn btn-outline btn-sm" id="testR2Btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 4px;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>测试连接</button>
+                    </div>
+                </div>
+
+                <!-- Section 3: Domain -->
+                <div style="background: var(--mac-surface); border: 1px solid var(--mac-border); border-radius: 14px; padding: 18px;">
+                    <h4 style="font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--accent-success);"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                        平台一级主域名配置
+                    </h4>
+                    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-bottom: 14px;">
+                        <div class="form-group" style="margin: 0;">
+                            <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: block;">一级主域名 (Primary Domain)</label>
+                            <input type="text" class="admin-input" id="primaryDomainInput" placeholder="例如：example.com（留空为默认模式）">
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: block;">访问协议 (Protocol)</label>
+                            <select class="admin-input" id="useHttpsSelect">
+                                <option value="true">HTTPS (https://)</option>
+                                <option value="false">HTTP (http://)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary btn-sm" id="saveDomainConfigBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 4px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>保存域名配置</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CDKEY Management Modal (卡密生成与弹窗管理) -->
+    <div class="modal-overlay hidden" id="cdkeyModal" style="z-index: 1050;">
+        <div class="modal-container glass-panel" style="max-width: 960px; max-height: 90vh;">
+            <div class="modal-header">
+                <div class="modal-title-wrap">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+                    <h3>卡密生成与使用状态管理</h3>
+                </div>
+                <button class="btn-close" id="closeCdkeyModalBtn">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 20px; overflow-y: auto;">
+                <!-- Key Stats in Modal -->
+                <div class="key-stats" style="margin-bottom: 16px;">
+                    <div class="key-stat">
+                        <span class="stat-number total" id="modalStatTotal">-</span>
+                        <span class="stat-label">总生成数</span>
+                    </div>
+                    <div class="key-stat">
+                        <span class="stat-number unused" id="modalStatUnused">-</span>
+                        <span class="stat-label">待激活</span>
+                    </div>
+                    <div class="key-stat">
+                        <span class="stat-number used" id="modalStatUsed">-</span>
+                        <span class="stat-label">生效中 (无限次)</span>
+                    </div>
+                    <div class="key-stat">
+                        <span class="stat-number" id="modalStatExpired" style="color: var(--accent-error);">-</span>
+                        <span class="stat-label">已到期</span>
+                    </div>
+                </div>
+
+                <!-- Generate Keys Form -->
+                <div style="background: var(--mac-surface); border: 1px solid var(--mac-border); border-radius: 12px; padding: 16px; margin-bottom: 16px;">
+                    <h4 style="font-size: 13px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                        批量生成新卡密（全类型支持有效期内无限次生成链接）
+                    </h4>
+                    <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">所有卡密均为<b>不限次数生成</b>模式，用户在卡密有效期内可无限次生成/托管网页，首次使用自动激活并开始计算有效期。</p>
+                    <div style="display: grid; grid-template-columns: 1fr 1.3fr 120px; gap: 12px; align-items: flex-end;">
+                        <div class="form-group" style="margin: 0;">
+                            <label style="font-size: 12px; color: var(--text-secondary);">生成数量 (1-100)</label>
+                            <input type="number" class="admin-input" id="cdkeyCount" value="10" min="1" max="100">
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label style="font-size: 12px; color: var(--text-secondary);">卡密有效期时长</label>
+                            <select class="admin-input" id="cdkeyDuration">
+                                <option value="3d">3 天 (体验卡 · 3天内无限次)</option>
+                                <option value="1m" selected>1 个月 (月卡/30天 · 30天内无限次)</option>
+                                <option value="6m">半年 (半年卡/180天 · 180天内无限次)</option>
+                                <option value="1y">1 年 (年卡/365天 · 365天内无限次)</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary" id="generateCdkeyBtn" style="height: 42px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>立即生成</button>
+                    </div>
+                </div>
+
+                <!-- Generated CDKEY Output Box -->
+                <div class="cdkey-output" id="cdkeyResultWrapper" style="margin-bottom: 16px; display: none;">
+                    <div class="cdkey-output-header">
+                        <span style="font-weight: 600; color: var(--accent-success); display: flex; align-items: center; gap: 4px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>新生成卡密列表</span>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn btn-sm btn-outline" id="copyAllCdkeysBtn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -1px; margin-right: 2px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>复制全部</button>
+                            <button class="btn btn-sm btn-outline" id="exportNewCdkeysBtn" style="color: var(--mac-blue);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -1px; margin-right: 2px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导出 TXT</button>
+                        </div>
+                    </div>
+                    <textarea class="admin-input cdkey-textarea" id="cdkeyResultList" readonly placeholder="生成的卡密将显示在这里..."></textarea>
+                </div>
+
+                <!-- Filter, Search, Export & Cleanup Toolbar -->
+                <div class="filter-bar" style="margin-bottom: 10px; flex-wrap: wrap; gap: 8px; justify-content: space-between;">
+                    <div class="filter-tabs">
+                        <div class="filter-tab active" data-filter="all">全部 (<span id="countAll">0</span>)</div>
+                        <div class="filter-tab" data-filter="unused">待激活 (<span id="countUnused">0</span>)</div>
+                        <div class="filter-tab" data-filter="active">生效中 (<span id="countUsed">0</span>)</div>
+                        <div class="filter-tab" data-filter="expired">已到期 (<span id="countExpired">0</span>)</div>
+                    </div>
+
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <select class="admin-input" id="keyDurationFilter" style="width: 140px; padding: 6px 10px; font-size: 12px; margin: 0;" title="按时长类型筛选">
+                            <option value="all">所有有效时长</option>
+                            <option value="3d">3 天体验卡</option>
+                            <option value="1m">1 个月月卡</option>
+                            <option value="6m">半年卡 (6个月)</option>
+                            <option value="1y">1 年年卡</option>
+                        </select>
+                        <input type="text" class="admin-input" id="searchKeyInput" placeholder="搜索卡密 / 域名..." style="width: 160px; padding: 6px 10px; font-size: 12px; margin: 0;">
+                    </div>
+                </div>
+
+                <!-- Batch Operations Toolbar (按类型导出与清理) -->
+                <div style="display: flex; justify-content: space-between; align-items: center; background: var(--mac-surface); border: 1px solid var(--mac-border); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+                    <!-- Type-based Export -->
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="font-size: 12px; color: var(--text-secondary); font-weight: 600; white-space: nowrap;">按类型导出:</span>
+                        <select class="admin-input" id="exportScopeSelect" style="width: 220px; padding: 5px 8px; font-size: 12px; margin: 0;">
+                            <option value="current">导出：当前筛选结果</option>
+                            <option value="unused_all">导出：全量待激活卡密 (纯密钥)</option>
+                            <option value="unused_3d">导出：3天体验卡 (待激活)</option>
+                            <option value="unused_1m">导出：1个月月卡 (待激活)</option>
+                            <option value="unused_6m">导出：半年卡 (待激活)</option>
+                            <option value="unused_1y">导出：1年年卡 (待激活)</option>
+                            <option value="all_detail">导出：全量完整卡密台账 (含状态/次数)</option>
+                        </select>
+                        <button class="btn btn-outline btn-sm" id="exportFilteredKeysBtn" style="white-space: nowrap; color: var(--accent-success);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -1px; margin-right: 2px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导出 TXT</button>
+                    </div>
+
+                    <!-- Type-based Cleaning -->
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="font-size: 12px; color: var(--text-secondary); font-weight: 600; white-space: nowrap;">按类型清理:</span>
+                        <select class="admin-input" id="cleanScopeSelect" style="width: 200px; padding: 5px 8px; font-size: 12px; margin: 0;">
+                            <option value="expired">清理：所有已到期失效卡密</option>
+                            <option value="active">清理：所有生效中卡密</option>
+                            <option value="unused">清理：所有待激活卡密</option>
+                            <option value="3d">清理类型：所有 3 天体验卡</option>
+                            <option value="1m">清理类型：所有 1 个月月卡</option>
+                            <option value="6m">清理类型：所有 半年卡</option>
+                            <option value="1y">清理类型：所有 1 年年卡</option>
+                            <option value="all">⚠️ 彻底清空全量所有卡密</option>
+                        </select>
+                        <button class="btn btn-outline btn-sm" id="doCleanByTypeBtn" style="white-space: nowrap; color: var(--accent-error);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -1px; margin-right: 2px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>执行清理</button>
+                    </div>
+                </div>
+
+                <!-- CDKEY Table List in Modal -->
+                <div class="admin-table-wrapper" style="max-height: 400px; overflow-y: auto;">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>卡密密钥 (CDKEY)</th>
+                                <th>有效时长</th>
+                                <th>状态 (生成次数)</th>
+                                <th>最近关联站点 / 域名</th>
+                                <th>生成时间</th>
+                                <th>到期时间</th>
+                                <th style="text-align: right;">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cdkeyTableBody">
+                            <tr><td colspan="7" style="text-align: center; color: var(--text-secondary); padding: 30px;">加载中...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <p>&copy; 2026 秒转链接 管理后台</p>
+        </div>
+    </footer>
+
+    <script src="js/admin.js"></script>
+</body>
+</html>
