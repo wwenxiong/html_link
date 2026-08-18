@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <!-- CSS -->
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/style.css?v=2.0">
     <!-- QRCode.js -->
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <!-- Anti-flicker Theme Init Script -->
@@ -138,8 +138,7 @@
             <div class="form-group cdkey-group">
                 <div class="input-wrapper">
                     <input type="text" id="cdkeyInput" placeholder="请输入卡密 (CDKEY)">
-                    <a id="cdkeyBuyLink" class="cdkey-action-btn" title="获取卡密渠道">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    <a id="cdkeyBuyLink" class="cdkey-suffix-tag" title="点击获取卡密">
                         <span id="cdkeyBuyText">获取卡密</span>
                     </a>
                 </div>
@@ -393,8 +392,7 @@
                     <label style="font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; display: block;">输入续期卡密 (CDKEY)</label>
                     <div class="input-wrapper">
                         <input type="text" id="modalRenewCdkeyInput" placeholder="请输入新卡密密钥 (HTML-XXXX-XXXX...)">
-                        <a id="modalRenewCdkeyBuyLink" class="cdkey-action-btn" title="获取卡密渠道">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                        <a id="modalRenewCdkeyBuyLink" class="cdkey-suffix-tag" title="点击获取卡密">
                             <span class="cdkey-buy-text-renew">获取卡密</span>
                         </a>
                     </div>
@@ -446,6 +444,6 @@
     </div>
 
     <!-- Scripts -->
-    <script src="js/app.js"></script>
+    <script src="js/app.js?v=2.0"></script>
 </body>
 </html>

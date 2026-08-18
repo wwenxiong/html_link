@@ -747,42 +747,27 @@ code, pre, .font-mono, .code-text, .cdkey-code, .url-text, .site-url, .badge-mon
 
 .cdkey-group .input-wrapper input,
 #modalRenewCdkeyInput {
-    padding-right: 95px !important;
+    padding-right: 85px !important;
 }
 
-.cdkey-action-btn {
+.cdkey-suffix-tag {
     position: absolute;
-    right: 6px;
-    top: 50%;
-    transform: translateY(-50%);
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4.5px 9px;
+    right: 14px;
     font-size: 12px;
+    color: var(--text-tertiary);
     font-weight: 600;
-    color: var(--mac-blue);
-    background: rgba(10, 132, 255, 0.09);
-    border: 1px solid rgba(10, 132, 255, 0.25);
-    border-radius: 7px;
     text-decoration: none;
     cursor: pointer;
-    white-space: nowrap;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: color 0.2s ease;
     user-select: none;
     z-index: 2;
 }
 
-.cdkey-action-btn:hover {
-    background: rgba(10, 132, 255, 0.18);
-    border-color: rgba(10, 132, 255, 0.5);
+.cdkey-suffix-tag:hover {
     color: var(--mac-blue);
-    transform: translateY(-50%) scale(1.02);
+    text-decoration: underline;
 }
 
-.cdkey-action-btn:active {
-    transform: translateY(-50%) scale(0.97);
-}
 
 
 .input-wrapper input:focus,

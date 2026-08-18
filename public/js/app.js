@@ -139,7 +139,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ---- Fetch Public Config ----
     async function loadPublicConfig() {
         try {
-            const { data } = await safeFetchJson('/api/public-config');
+            const { data } = await safeFetchJson('/api/public-config?t=' + Date.now());
             if (data.success && data.data) {
                 publicDomainConfig = data.data;
                 if (publicDomainConfig.primaryDomain) {
