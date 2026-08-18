@@ -163,9 +163,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function normalizeBuyUrl(rawUrl) {
+        if (!rawUrl) return '';
+        let url = rawUrl.trim();
+        if (!/^https?:\/\//i.test(url)) {
+            url = 'https://' + url;
+        }
+        return url.replace(/ /g, '%20');
+    }
+
     function applyCdkeyBuyConfig(config) {
-        const buyUrl = (config && config.cdkeyBuyUrl) ? config.cdkeyBuyUrl.trim() : '';
+        const rawUrl = (config && config.cdkeyBuyUrl) ? config.cdkeyBuyUrl.trim() : '';
         const buyText = (config && config.cdkeyBuyText) ? config.cdkeyBuyText.trim() : '获取卡密';
+        const finalUrl = normalizeBuyUrl(rawUrl);
 
         const linkEl = document.getElementById('cdkeyBuyLink');
         const textEl = document.getElementById('cdkeyBuyText');
@@ -176,37 +186,40 @@ document.addEventListener('DOMContentLoaded', () => {
         if (textEl) textEl.textContent = buyText;
         renewTextEls.forEach(el => { el.textContent = buyText; });
 
-        const handleCdkeyLinkClick = (e) => {
-            if (buyUrl) {
-                const finalUrl = (/^https?:\/\//i.test(buyUrl)) ? buyUrl : `https://${buyUrl}`;
-                window.open(finalUrl, '_blank', 'noopener,noreferrer');
+        function setupBuyLink(el) {
+            if (!el) return;
+            if (finalUrl) {
+                el.href = finalUrl;
+                el.target = '_blank';
+                el.rel = 'noopener noreferrer';
+                el.onclick = (e) => {
+                    e.stopPropagation();
+                };
             } else {
-                showToast('暂未配置卡密获取链接，请联系管理员获取卡密', 'info');
-            }
-            if (e) e.preventDefault();
-        };
-
-        if (linkEl) {
-            linkEl.onclick = handleCdkeyLinkClick;
-            if (buyUrl) {
-                const finalUrl = (/^https?:\/\//i.test(buyUrl)) ? buyUrl : `https://${buyUrl}`;
-                linkEl.href = finalUrl;
+                el.removeAttribute('href');
+                el.removeAttribute('target');
+                el.onclick = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    showToast('暂未配置卡密获取链接，请联系管理员获取卡密', 'info');
+                };
             }
         }
 
-        if (renewLinkEl) {
-            renewLinkEl.onclick = handleCdkeyLinkClick;
-            if (buyUrl) {
-                const finalUrl = (/^https?:\/\//i.test(buyUrl)) ? buyUrl : `https://${buyUrl}`;
-                renewLinkEl.href = finalUrl;
-            }
-        }
+        setupBuyLink(linkEl);
+        setupBuyLink(renewLinkEl);
 
         if (stepGetCdkeyEl) {
-            stepGetCdkeyEl.style.cursor = 'pointer';
-            stepGetCdkeyEl.onclick = handleCdkeyLinkClick;
-            if (buyUrl) {
-                stepGetCdkeyEl.title = `点击前往获取卡密`;
+            if (finalUrl) {
+                stepGetCdkeyEl.style.cursor = 'pointer';
+                stepGetCdkeyEl.title = '点击前往获取卡密';
+                stepGetCdkeyEl.onclick = () => {
+                    window.open(finalUrl, '_blank', 'noopener,noreferrer');
+                };
+            } else {
+                stepGetCdkeyEl.style.cursor = 'default';
+                stepGetCdkeyEl.title = '';
+                stepGetCdkeyEl.onclick = null;
             }
         }
     }

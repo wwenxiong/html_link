@@ -1049,10 +1049,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function safeFetchJson(url, options = {}) {
+        const resp = await fetch(url, options);
+        const contentType = resp.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+            throw new Error(`服务器未响应JSON (HTTP ${resp.status})，若刚更新代码请在服务器重启Node进程(如 pm2 restart)`);
+        }
+        const data = await resp.json();
+        return { resp, data };
+    }
+
     async function loadCdkeyBuyConfig() {
         try {
-            const response = await fetch(`/api/admin/cdkey-buy-config?password=${encodeURIComponent(adminPassword)}`);
-            const data = await response.json();
+            const { data } = await safeFetchJson(`/api/admin/cdkey-buy-config?password=${encodeURIComponent(adminPassword)}`);
 
             if (data.success && data.data) {
                 if (cdkeyBuyUrlInput) cdkeyBuyUrlInput.value = data.data.cdkeyBuyUrl || '';
@@ -1073,15 +1082,13 @@ document.addEventListener('DOMContentLoaded', () => {
             saveCdkeyBuyConfigBtn.textContent = '保存中...';
 
             try {
-                const response = await fetch('/api/admin/cdkey-buy-config', {
+                const { resp, data } = await safeFetchJson('/api/admin/cdkey-buy-config', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ cdkeyBuyUrl, cdkeyBuyText, password: adminPassword })
                 });
 
-                const data = await response.json();
-
-                if (!response.ok || !data.success) {
+                if (!resp.ok || !data.success) {
                     throw new Error(data.message || '保存失败');
                 }
 
