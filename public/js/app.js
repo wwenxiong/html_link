@@ -150,6 +150,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 updateDomainPreview(customPathInput.value.trim().toLowerCase());
 
+                // Apply CDKEY acquisition link settings
+                applyCdkeyBuyConfig(publicDomainConfig);
+
                 // Initialize Clerk if publishable key is available
                 if (publicDomainConfig.clerkPublishableKey) {
                     initClerk(publicDomainConfig.clerkPublishableKey);
@@ -159,6 +162,55 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Failed to load public config:', e);
         }
     }
+
+    function applyCdkeyBuyConfig(config) {
+        const buyUrl = (config && config.cdkeyBuyUrl) ? config.cdkeyBuyUrl.trim() : '';
+        const buyText = (config && config.cdkeyBuyText) ? config.cdkeyBuyText.trim() : '获取卡密';
+
+        const linkEl = document.getElementById('cdkeyBuyLink');
+        const textEl = document.getElementById('cdkeyBuyText');
+        const renewLinkEl = document.getElementById('modalRenewCdkeyBuyLink');
+        const renewTextEls = document.querySelectorAll('.cdkey-buy-text-renew');
+        const stepGetCdkeyEl = document.getElementById('stepGetCdkey');
+
+        if (textEl) textEl.textContent = buyText;
+        renewTextEls.forEach(el => { el.textContent = buyText; });
+
+        const handleCdkeyLinkClick = (e) => {
+            if (buyUrl) {
+                const finalUrl = (/^https?:\/\//i.test(buyUrl)) ? buyUrl : `https://${buyUrl}`;
+                window.open(finalUrl, '_blank', 'noopener,noreferrer');
+            } else {
+                showToast('暂未配置卡密获取链接，请联系管理员获取卡密', 'info');
+            }
+            if (e) e.preventDefault();
+        };
+
+        if (linkEl) {
+            linkEl.onclick = handleCdkeyLinkClick;
+            if (buyUrl) {
+                const finalUrl = (/^https?:\/\//i.test(buyUrl)) ? buyUrl : `https://${buyUrl}`;
+                linkEl.href = finalUrl;
+            }
+        }
+
+        if (renewLinkEl) {
+            renewLinkEl.onclick = handleCdkeyLinkClick;
+            if (buyUrl) {
+                const finalUrl = (/^https?:\/\//i.test(buyUrl)) ? buyUrl : `https://${buyUrl}`;
+                renewLinkEl.href = finalUrl;
+            }
+        }
+
+        if (stepGetCdkeyEl) {
+            stepGetCdkeyEl.style.cursor = 'pointer';
+            stepGetCdkeyEl.onclick = handleCdkeyLinkClick;
+            if (buyUrl) {
+                stepGetCdkeyEl.title = `点击前往获取卡密`;
+            }
+        }
+    }
+
     loadPublicConfig();
 
     // ---- Toast System ----

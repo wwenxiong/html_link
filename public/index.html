@@ -136,6 +136,17 @@
 
             <!-- CDKEY Input -->
             <div class="form-group cdkey-group">
+                <div class="input-label-row">
+                    <label for="cdkeyInput" class="field-label">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 3px;"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+                        <span>部署卡密 (CDKEY)</span>
+                    </label>
+                    <a href="javascript:void(0)" id="cdkeyBuyLink" class="cdkey-buy-badge" target="_blank" rel="noopener noreferrer" title="点击获取或购买部署卡密">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+                        <span id="cdkeyBuyText">获取卡密</span>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="external-icon"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    </a>
+                </div>
                 <div class="input-wrapper">
                     <input type="text" id="cdkeyInput" placeholder="请输入卡密 (CDKEY)">
                 </div>
@@ -386,8 +397,18 @@
                 </div>
 
                 <div class="form-group" style="margin-bottom: 20px;">
-                    <label style="font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; display: block;">输入续期卡密 (CDKEY)</label>
-                    <div class="input-wrapper">
+                    <div class="input-label-row">
+                        <label style="font-size: 13px; color: var(--text-secondary); margin-bottom: 0; display: flex; align-items: center; gap: 4px;">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+                            <span>输入续期卡密 (CDKEY)</span>
+                        </label>
+                        <a href="javascript:void(0)" id="modalRenewCdkeyBuyLink" class="cdkey-buy-badge" target="_blank" rel="noopener noreferrer" style="font-size: 11.5px; padding: 2px 7px;">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+                            <span class="cdkey-buy-text-renew">获取卡密</span>
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="external-icon"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                        </a>
+                    </div>
+                    <div class="input-wrapper" style="margin-top: 6px;">
                         <input type="text" id="modalRenewCdkeyInput" placeholder="请输入新卡密密钥 (HTML-XXXX-XXXX...)">
                     </div>
                 </div>

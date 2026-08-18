@@ -658,6 +658,60 @@ code, pre, .font-mono, .code-text, .cdkey-code, .url-text, .site-url, .badge-mon
     margin-top: 16px;
 }
 
+.input-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
+.field-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.cdkey-buy-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--mac-blue);
+    background: rgba(10, 132, 255, 0.08);
+    border: 1px solid rgba(10, 132, 255, 0.22);
+    border-radius: 6px;
+    padding: 2.5px 8px;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cdkey-buy-badge:hover {
+    background: rgba(10, 132, 255, 0.16);
+    border-color: rgba(10, 132, 255, 0.45);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(10, 132, 255, 0.2);
+    color: var(--mac-blue);
+}
+
+.cdkey-buy-badge:active {
+    transform: scale(0.97);
+}
+
+.cdkey-buy-badge .external-icon {
+    opacity: 0.7;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.cdkey-buy-badge:hover .external-icon {
+    opacity: 1;
+    transform: translate(1px, -1px);
+}
+
 .input-wrapper {
     position: relative;
     display: flex;

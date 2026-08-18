@@ -124,6 +124,15 @@ function isClerkConfigured() {
   );
 }
 
+// CDKEY Acquisition / Purchase Channel Helper
+function getCdkeyBuyConfig() {
+  const config = loadJSON(CONFIG_FILE, {});
+  const cdkeyBuyUrl = (config.cdkeyBuyUrl !== undefined ? config.cdkeyBuyUrl : (process.env.CDKEY_BUY_URL || '')).trim();
+  const cdkeyBuyText = (config.cdkeyBuyText !== undefined ? config.cdkeyBuyText : (process.env.CDKEY_BUY_TEXT || '获取卡密')).trim();
+  return { cdkeyBuyUrl, cdkeyBuyText };
+}
+
+
 async function safeGetAuth(req) {
   try {
     if (!isClerkConfigured()) return { userId: null, sessionId: null };
@@ -561,13 +570,16 @@ function generateRandomSubdomain(sites = []) {
 app.get('/api/public-config', (req, res) => {
   const { primaryDomain, useHttps } = getDomainConfig();
   const { publishableKey } = getClerkConfig();
+  const { cdkeyBuyUrl, cdkeyBuyText } = getCdkeyBuyConfig();
   return res.json({
     success: true,
     data: {
       primaryDomain,
       useHttps,
       protocol: useHttps ? 'https://' : 'http://',
-      clerkPublishableKey: isClerkConfigured() ? publishableKey : ''
+      clerkPublishableKey: isClerkConfigured() ? publishableKey : '',
+      cdkeyBuyUrl,
+      cdkeyBuyText
     }
   });
 });
@@ -1449,6 +1461,44 @@ app.post('/api/admin/domain-config', (req, res) => {
     data: getDomainConfig()
   });
 });
+
+// --- Admin: Get CDKEY Purchase Link Config ---
+app.get('/api/admin/cdkey-buy-config', (req, res) => {
+  const { password } = req.query;
+
+  if (password !== ADMIN_PASSWORD) {
+    return res.status(403).json({ success: false, message: '管理员密码错误' });
+  }
+
+  return res.json({ success: true, data: getCdkeyBuyConfig() });
+});
+
+// --- Admin: Save CDKEY Purchase Link Config ---
+app.post('/api/admin/cdkey-buy-config', (req, res) => {
+  const { cdkeyBuyUrl, cdkeyBuyText, password } = req.body;
+
+  if (password !== ADMIN_PASSWORD) {
+    return res.status(403).json({ success: false, message: '管理员密码错误' });
+  }
+
+  const config = loadJSON(CONFIG_FILE, {});
+  config.cdkeyBuyUrl = (cdkeyBuyUrl || '').trim();
+  config.cdkeyBuyText = (cdkeyBuyText || '').trim() || '获取卡密';
+
+  saveJSON(CONFIG_FILE, config);
+
+  updateEnvFile({
+    CDKEY_BUY_URL: config.cdkeyBuyUrl,
+    CDKEY_BUY_TEXT: config.cdkeyBuyText
+  });
+
+  return res.json({
+    success: true,
+    message: '卡密获取渠道配置已更新！',
+    data: getCdkeyBuyConfig()
+  });
+});
+
 
 // In-memory Clerk user profile cache to avoid slow cross-border HTTP roundtrips
 const clerkUserMemoryCache = new Map();

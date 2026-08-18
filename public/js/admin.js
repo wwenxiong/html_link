@@ -188,6 +188,7 @@ document.addEventListener('DOMContentLoaded', () => {
             loadR2Config();
             loadDomainConfig();
             loadClerkConfig();
+            loadCdkeyBuyConfig();
             loadHealthStatus();
         } catch (error) {
             adminPassword = '';
@@ -748,6 +749,22 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const openSettingsForCdkeyBtn = document.getElementById('openSettingsForCdkeyBtn');
+    if (openSettingsForCdkeyBtn && settingsModal) {
+        openSettingsForCdkeyBtn.addEventListener('click', () => {
+            if (cdkeyModal) cdkeyModal.classList.add('hidden');
+            settingsModal.classList.remove('hidden');
+            const urlInput = document.getElementById('cdkeyBuyUrlInput');
+            if (urlInput) {
+                setTimeout(() => {
+                    urlInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    urlInput.focus();
+                }, 100);
+            }
+        });
+    }
+
+
     // Quick Clear Expired from Overview Card
     if (quickClearExpiredBtn) {
         quickClearExpiredBtn.addEventListener('click', () => {
@@ -855,7 +872,7 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast(error.message || '保存失败', 'error');
         } finally {
             saveR2ConfigBtn.disabled = false;
-            saveR2ConfigBtn.textContent = '💾 保存 R2 配置';
+            saveR2ConfigBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 4px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>保存 R2 配置';
         }
     });
 
@@ -882,7 +899,7 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast(error.message || 'R2 连接测试失败', 'error');
         } finally {
             testR2Btn.disabled = false;
-            testR2Btn.textContent = '🔗 测试连接';
+            testR2Btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 4px;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>测试连接';
         }
     });
 
@@ -942,7 +959,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 showToast(error.message || '保存失败', 'error');
             } finally {
                 saveDomainConfigBtn.disabled = false;
-                saveDomainConfigBtn.textContent = '💾 保存域名配置';
+                saveDomainConfigBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 4px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>保存域名配置';
             }
         });
     }
@@ -1005,7 +1022,76 @@ document.addEventListener('DOMContentLoaded', () => {
                 showToast(error.message || '保存失败', 'error');
             } finally {
                 saveClerkConfigBtn.disabled = false;
-                saveClerkConfigBtn.textContent = '💾 保存 Clerk 配置';
+                saveClerkConfigBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 4px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>保存 Clerk 配置';
+            }
+        });
+    }
+
+    // ---- CDKEY Acquisition Channel Link Config ----
+    const saveCdkeyBuyConfigBtn = document.getElementById('saveCdkeyBuyConfigBtn');
+    const cdkeyBuyUrlInput = document.getElementById('cdkeyBuyUrlInput');
+    const cdkeyBuyTextInput = document.getElementById('cdkeyBuyTextInput');
+    const overviewCdkeyBuyStatus = document.getElementById('overviewCdkeyBuyStatus');
+    const cdkeyModalBuyStatus = document.getElementById('cdkeyModalBuyStatus');
+
+    function updateCdkeyBuyStatusUI(url, text) {
+        const hasUrl = Boolean(url && url.trim());
+        const displayTxt = text ? ` (${escapeHtml(text)})` : '';
+        if (overviewCdkeyBuyStatus) {
+            overviewCdkeyBuyStatus.innerHTML = hasUrl 
+                ? `<span style="color: var(--accent-success); font-weight: 600;">● 已配置${displayTxt}</span>`
+                : '<span style="color: var(--text-secondary);">○ 未配置外部跳转</span>';
+        }
+        if (cdkeyModalBuyStatus) {
+            cdkeyModalBuyStatus.innerHTML = hasUrl
+                ? `<span style="color: var(--accent-success); font-weight: 600;">已开启：<a href="${escapeHtml(url)}" target="_blank" style="color: var(--mac-blue); text-decoration: underline;">${escapeHtml(url)}</a>${displayTxt}</span>`
+                : '<span style="color: var(--text-secondary);">未配置（用户端点击将友好提示联系管理员）</span>';
+        }
+    }
+
+    async function loadCdkeyBuyConfig() {
+        try {
+            const response = await fetch(`/api/admin/cdkey-buy-config?password=${encodeURIComponent(adminPassword)}`);
+            const data = await response.json();
+
+            if (data.success && data.data) {
+                if (cdkeyBuyUrlInput) cdkeyBuyUrlInput.value = data.data.cdkeyBuyUrl || '';
+                if (cdkeyBuyTextInput) cdkeyBuyTextInput.value = data.data.cdkeyBuyText || '';
+                updateCdkeyBuyStatusUI(data.data.cdkeyBuyUrl, data.data.cdkeyBuyText);
+            }
+        } catch (e) {
+            console.warn('Failed to load CDKEY buy config:', e);
+        }
+    }
+
+    if (saveCdkeyBuyConfigBtn) {
+        saveCdkeyBuyConfigBtn.addEventListener('click', async () => {
+            const cdkeyBuyUrl = cdkeyBuyUrlInput ? cdkeyBuyUrlInput.value.trim() : '';
+            const cdkeyBuyText = cdkeyBuyTextInput ? cdkeyBuyTextInput.value.trim() : '';
+
+            saveCdkeyBuyConfigBtn.disabled = true;
+            saveCdkeyBuyConfigBtn.textContent = '保存中...';
+
+            try {
+                const response = await fetch('/api/admin/cdkey-buy-config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cdkeyBuyUrl, cdkeyBuyText, password: adminPassword })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || '保存失败');
+                }
+
+                updateCdkeyBuyStatusUI(cdkeyBuyUrl, cdkeyBuyText);
+                showToast('卡密获取渠道配置已成功保存！', 'success');
+            } catch (error) {
+                showToast(error.message || '保存失败', 'error');
+            } finally {
+                saveCdkeyBuyConfigBtn.disabled = false;
+                saveCdkeyBuyConfigBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 4px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>保存卡密渠道配置';
             }
         });
     }
