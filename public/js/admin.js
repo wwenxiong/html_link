@@ -1204,19 +1204,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    async function safeFetchJson(url, options = {}) {
-        const resp = await fetch(url, options);
-        const contentType = resp.headers.get('content-type') || '';
-        if (!contentType.includes('application/json')) {
-            throw new Error(`服务器未响应JSON (HTTP ${resp.status})，若刚更新代码请在服务器重启Node进程(如 pm2 restart)`);
-        }
-        const data = await resp.json();
-        return { resp, data };
-    }
-
     async function loadCdkeyBuyConfig() {
         try {
-            const { data } = await safeFetchJson(`/api/admin/cdkey-buy-config?password=${encodeURIComponent(adminPassword)}`);
+            const data = await safeFetchJson(`/api/admin/cdkey-buy-config?password=${encodeURIComponent(adminPassword)}`);
 
             if (data.success && data.data) {
                 if (cdkeyBuyUrlInput) cdkeyBuyUrlInput.value = data.data.cdkeyBuyUrl || '';
@@ -1237,13 +1227,13 @@ document.addEventListener('DOMContentLoaded', () => {
             saveCdkeyBuyConfigBtn.textContent = '保存中...';
 
             try {
-                const { resp, data } = await safeFetchJson('/api/admin/cdkey-buy-config', {
+                const data = await safeFetchJson('/api/admin/cdkey-buy-config', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ cdkeyBuyUrl, cdkeyBuyText, password: adminPassword })
                 });
 
-                if (!resp.ok || !data.success) {
+                if (!data.success) {
                     throw new Error(data.message || '保存失败');
                 }
 
@@ -1286,7 +1276,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function loadAnnouncementConfig() {
         try {
-            const { resp, data } = await safeFetchJson(`/api/admin/announcements?password=${encodeURIComponent(adminPassword)}`);
+            const data = await safeFetchJson(`/api/admin/announcements?password=${encodeURIComponent(adminPassword)}`);
             if (data && data.success && data.data) {
                 adminAnnouncementConfig = data.data;
                 const cfg = data.data;
@@ -1488,7 +1478,7 @@ document.addEventListener('DOMContentLoaded', () => {
             saveAnnouncementConfigBtn.textContent = '保存中...';
 
             try {
-                const { resp, data } = await safeFetchJson('/api/admin/announcements', {
+                const data = await safeFetchJson('/api/admin/announcements', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -1500,7 +1490,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     })
                 });
 
-                if (!resp.ok || !data.success) {
+                if (!data.success) {
                     throw new Error(data.message || '保存失败');
                 }
 
