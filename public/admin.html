@@ -443,24 +443,38 @@
                 <div id="panelGenerateKeys" style="background: var(--mac-surface); border: 1px solid var(--mac-border); border-radius: 12px; padding: 16px; margin-bottom: 16px;">
                     <h4 style="font-size: 13px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                        批量生成新卡密（全类型支持有效期内无限次生成链接）
+                        批量生成新卡密
                     </h4>
-                    <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">所有卡密均为<b>不限次数生成</b>模式，用户在卡密有效期内可无限次生成/托管网页，首次使用自动激活并开始计算有效期。</p>
-                    <div style="display: grid; grid-template-columns: 1fr 1.3fr 120px; gap: 12px; align-items: flex-end;">
+                    <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">支持设定卡密的<b>有效时长</b>与<b>最大可用次数</b>（设为 0 表示有效期内不限次数生成）。</p>
+                    <div style="display: grid; grid-template-columns: 100px 1.2fr 1.1fr 110px; gap: 10px; align-items: flex-end;">
                         <div class="form-group" style="margin: 0;">
-                            <label style="font-size: 12px; color: var(--text-secondary);">生成数量 (1-100)</label>
+                            <label style="font-size: 12px; color: var(--text-secondary);">数量 (1-100)</label>
                             <input type="number" class="admin-input" id="cdkeyCount" value="10" min="1" max="100">
                         </div>
                         <div class="form-group" style="margin: 0;">
                             <label style="font-size: 12px; color: var(--text-secondary);">卡密有效期时长</label>
                             <select class="admin-input" id="cdkeyDuration">
-                                <option value="3d">3 天 (体验卡 · 3天内无限次)</option>
-                                <option value="1m" selected>1 个月 (月卡/30天 · 30天内无限次)</option>
-                                <option value="6m">半年 (半年卡/180天 · 180天内无限次)</option>
-                                <option value="1y">1 年 (年卡/365天 · 365天内无限次)</option>
+                                <option value="3d">3 天 (体验卡)</option>
+                                <option value="7d">7 天 (周卡)</option>
+                                <option value="1m" selected>1 个月 (月卡 · 30天)</option>
+                                <option value="3m">3 个月 (季卡 · 90天)</option>
+                                <option value="6m">半年 (半年卡 · 180天)</option>
+                                <option value="1y">1 年 (年卡 · 365天)</option>
                             </select>
                         </div>
-                        <button class="btn btn-primary" id="generateCdkeyBtn" style="height: 42px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>立即生成</button>
+                        <div class="form-group" style="margin: 0;">
+                            <label style="font-size: 12px; color: var(--text-secondary);">可用次数 (0=不限)</label>
+                            <select class="admin-input" id="cdkeyMaxUsesSelect">
+                                <option value="0" selected>不限次数 (默认)</option>
+                                <option value="1">单次卡 (仅限 1 次)</option>
+                                <option value="3">3 次卡</option>
+                                <option value="5">5 次卡</option>
+                                <option value="10">10 次卡</option>
+                                <option value="custom">自定义输入...</option>
+                            </select>
+                            <input type="number" class="admin-input" id="cdkeyMaxUsesCustom" placeholder="输入可用次数" min="1" max="9999" style="display: none; margin-top: 4px; padding: 4px 8px; font-size: 12px;">
+                        </div>
+                        <button class="btn btn-primary" id="generateCdkeyBtn" style="height: 42px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>立即生成</button>
                     </div>
                 </div>
 
@@ -481,33 +495,43 @@
                         <textarea class="admin-input" id="importKeysTextarea" rows="5" style="font-family: monospace; font-size: 12px; resize: vertical; line-height: 1.5;" placeholder="例如：
 HTML-JMBP-C77H-5J5X-BWH4
 HTML-NNZ5-5H7G-UAQU-8HVZ
-HTML-FZDD-KSJD-HSHB-XN4B,3d
-HTML-WDU3-P3MX-26B4-RWFH,1y"></textarea>
+HTML-FZDD-KSJD-HSHB-XN4B,3d,1
+HTML-WDU3-P3MX-26B4-RWFH,1y,0"></textarea>
                     </div>
 
-                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 140px; gap: 12px; align-items: flex-end;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 120px; gap: 10px; align-items: flex-end;">
                         <div class="form-group" style="margin: 0;">
                             <label style="font-size: 12px; color: var(--text-secondary);">默认有效时长</label>
                             <select class="admin-input" id="importKeyDuration">
                                 <option value="3d">3 天 (体验卡)</option>
+                                <option value="7d">7 天 (周卡)</option>
                                 <option value="1m" selected>1 个月 (月卡)</option>
                                 <option value="3m">3 个月 (季卡)</option>
                                 <option value="6m">半年 (半年卡)</option>
                                 <option value="1y">1 年 (年卡)</option>
-                                <option value="forever">永久有效卡</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label style="font-size: 12px; color: var(--text-secondary);">默认可用次数</label>
+                            <select class="admin-input" id="importKeyMaxUses">
+                                <option value="0" selected>不限次数 (默认)</option>
+                                <option value="1">单次卡 (1 次)</option>
+                                <option value="3">3 次</option>
+                                <option value="5">5 次</option>
+                                <option value="10">10 次</option>
                             </select>
                         </div>
                         <div class="form-group" style="margin: 0;">
                             <label style="font-size: 12px; color: var(--text-secondary);">初始激活状态</label>
                             <select class="admin-input" id="importKeyStatus">
-                                <option value="unused" selected>待激活 (用户使用时激活)</option>
-                                <option value="active">生效中 (已处于可用状态)</option>
+                                <option value="unused" selected>待激活 (使用时激活)</option>
+                                <option value="active">生效中</option>
                             </select>
                         </div>
                         <div class="form-group" style="margin: 0; display: flex; align-items: center; height: 38px;">
                             <label style="font-size: 12px; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none;">
                                 <input type="checkbox" id="importKeyOverwrite" style="cursor: pointer;">
-                                覆盖已存在的卡密
+                                覆盖已存在卡密
                             </label>
                         </div>
                         <button class="btn btn-primary" id="doImportKeysBtn" style="height: 40px;">
@@ -542,7 +566,9 @@ HTML-WDU3-P3MX-26B4-RWFH,1y"></textarea>
                         <select class="admin-input" id="keyDurationFilter" style="width: 140px; padding: 6px 10px; font-size: 12px; margin: 0;" title="按时长类型筛选">
                             <option value="all">所有有效时长</option>
                             <option value="3d">3 天体验卡</option>
+                            <option value="7d">7 天周卡</option>
                             <option value="1m">1 个月月卡</option>
+                            <option value="3m">3 个月季卡</option>
                             <option value="6m">半年卡 (6个月)</option>
                             <option value="1y">1 年年卡</option>
                         </select>
@@ -559,10 +585,12 @@ HTML-WDU3-P3MX-26B4-RWFH,1y"></textarea>
                             <option value="current">导出：当前筛选结果</option>
                             <option value="unused_all">导出：全量待激活卡密 (纯密钥)</option>
                             <option value="unused_3d">导出：3天体验卡 (待激活)</option>
+                            <option value="unused_7d">导出：7天周卡 (待激活)</option>
                             <option value="unused_1m">导出：1个月月卡 (待激活)</option>
+                            <option value="unused_3m">导出：3个月季卡 (待激活)</option>
                             <option value="unused_6m">导出：半年卡 (待激活)</option>
                             <option value="unused_1y">导出：1年年卡 (待激活)</option>
-                            <option value="all_detail">导出：全量完整卡密台账 (含状态/次数)</option>
+                            <option value="all_detail">导出：全量完整卡密台账 (含状态/次数/上限)</option>
                         </select>
                         <button class="btn btn-outline btn-sm" id="exportFilteredKeysBtn" style="white-space: nowrap; color: var(--accent-success);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -1px; margin-right: 2px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导出 TXT</button>
                     </div>
@@ -571,11 +599,13 @@ HTML-WDU3-P3MX-26B4-RWFH,1y"></textarea>
                     <div style="display: flex; align-items: center; gap: 6px;">
                         <span style="font-size: 12px; color: var(--text-secondary); font-weight: 600; white-space: nowrap;">按类型清理:</span>
                         <select class="admin-input" id="cleanScopeSelect" style="width: 200px; padding: 5px 8px; font-size: 12px; margin: 0;">
-                            <option value="expired">清理：所有已到期失效卡密</option>
+                            <option value="expired">清理：所有已到期/已用完卡密</option>
                             <option value="active">清理：所有生效中卡密</option>
                             <option value="unused">清理：所有待激活卡密</option>
                             <option value="3d">清理类型：所有 3 天体验卡</option>
+                            <option value="7d">清理类型：所有 7 天周卡</option>
                             <option value="1m">清理类型：所有 1 个月月卡</option>
+                            <option value="3m">清理类型：所有 3 个月季卡</option>
                             <option value="6m">清理类型：所有 半年卡</option>
                             <option value="1y">清理类型：所有 1 年年卡</option>
                             <option value="all">⚠️ 彻底清空全量所有卡密</option>
@@ -591,7 +621,8 @@ HTML-WDU3-P3MX-26B4-RWFH,1y"></textarea>
                             <tr>
                                 <th>卡密密钥 (CDKEY)</th>
                                 <th>有效时长</th>
-                                <th>状态 (生成次数)</th>
+                                <th>可用次数 (已用/上限)</th>
+                                <th>当前状态</th>
                                 <th>最近关联站点 / 域名</th>
                                 <th>生成时间</th>
                                 <th>到期时间</th>

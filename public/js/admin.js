@@ -151,12 +151,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function formatDuration(dur) {
         if (dur === '3d') return '3天体验';
+        if (dur === '7d') return '7天周卡';
         if (dur === '1m' || dur === '30d') return '1个月';
+        if (dur === '3m' || dur === '90d') return '3个月';
         if (dur === '6m' || dur === '180d') return '半年';
         if (dur === '1y' || dur === '365d') return '1年';
-        if (dur === 'forever' || dur === 'unlimited') return '永久有效';
-        if (dur === '3m' || dur === '90d') return '3个月';
-        if (dur === '7d') return '7天周卡';
         return dur || '标准';
     }
 
@@ -245,8 +244,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateKeyStatsAndTable() {
         const total = allKeys.length;
         const unused = allKeys.filter(k => k.status === 'unused').length;
-        const active = allKeys.filter(k => k.status === 'active' || k.status === 'used').length;
-        const expired = allKeys.filter(k => k.status === 'expired').length;
+        const active = allKeys.filter(k => k.status === 'active').length;
+        const expired = allKeys.filter(k => k.status === 'expired' || k.status === 'used').length;
 
         if (statTotal) statTotal.textContent = total;
         if (statUnused) statUnused.textContent = unused;
@@ -272,8 +271,10 @@ document.addEventListener('DOMContentLoaded', () => {
         let filtered = allKeys;
 
         if (currentFilter !== 'all') {
-            if (currentFilter === 'active' || currentFilter === 'used') {
-                filtered = filtered.filter(k => k.status === 'active' || k.status === 'used');
+            if (currentFilter === 'active') {
+                filtered = filtered.filter(k => k.status === 'active');
+            } else if (currentFilter === 'expired') {
+                filtered = filtered.filter(k => k.status === 'expired' || k.status === 'used');
             } else {
                 filtered = filtered.filter(k => k.status === currentFilter);
             }
@@ -292,17 +293,32 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (filtered.length === 0) {
-            cdkeyTableBody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-secondary); padding: 30px;">无匹配卡密记录</td></tr>`;
+            cdkeyTableBody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-secondary); padding: 30px;">无匹配卡密记录</td></tr>`;
             return;
         }
 
         cdkeyTableBody.innerHTML = filtered.map(k => {
-            const count = k.usedCount || 0;
+            const count = Number(k.usedCount) || 0;
+            const maxUses = Number(k.maxUses) || 0;
+
             let statusBadge = '<span class="badge badge-unused">待激活</span>';
             if (k.status === 'expired') {
                 statusBadge = '<span class="badge badge-expired">已到期</span>';
-            } else if (k.status === 'active' || k.status === 'used' || count > 0) {
-                statusBadge = `<span class="badge badge-used" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-success);">生效中 (${count}次)</span>`;
+            } else if (k.status === 'used' || (maxUses > 0 && count >= maxUses)) {
+                statusBadge = '<span class="badge" style="background: rgba(239, 68, 68, 0.15); color: var(--accent-error);">已用完</span>';
+            } else if (k.status === 'active' || count > 0) {
+                statusBadge = `<span class="badge badge-used" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-success);">生效中</span>`;
+            }
+
+            let usageDisplay = '';
+            if (maxUses > 0) {
+                if (count >= maxUses) {
+                    usageDisplay = `<span class="badge" style="background: rgba(239, 68, 68, 0.12); color: var(--accent-error); font-weight: 600;">${count} / ${maxUses} 次 (上限)</span>`;
+                } else {
+                    usageDisplay = `<span class="badge" style="background: rgba(59, 130, 246, 0.12); color: var(--mac-blue); font-weight: 600;">${count} / ${maxUses} 次</span>`;
+                }
+            } else {
+                usageDisplay = `<span class="badge" style="background: var(--mac-surface); border: 1px solid var(--mac-border); color: var(--text-secondary);">${count} 次 (不限)</span>`;
             }
 
             const durationBadge = `<span class="badge badge-duration">${formatDuration(k.duration)}</span>`;
@@ -322,9 +338,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             let expDisplay = '-';
-            if (k.duration === 'forever' || k.duration === 'unlimited') {
-                expDisplay = '<span style="color: var(--accent-success); font-weight: 500;">永久有效</span>';
-            } else if (k.expiresAt) {
+            if (k.expiresAt) {
                 expDisplay = formatDate(k.expiresAt);
             } else {
                 expDisplay = `<span style="color: var(--text-muted); font-size: 11.5px;">首次使用起算 ${formatDuration(k.duration)}</span>`;
@@ -337,6 +351,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <button class="action-icon-btn copy-single-key" data-key="${k.key}" title="复制卡密"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                     </td>
                     <td>${durationBadge}</td>
+                    <td>${usageDisplay}</td>
                     <td>${statusBadge}</td>
                     <td>${siteLink}</td>
                     <td style="color: var(--text-secondary);">${formatDate(k.createdAt)}</td>
@@ -494,10 +509,26 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // ---- Custom Max Uses Input Toggle ----
+    const cdkeyMaxUsesSelect = document.getElementById('cdkeyMaxUsesSelect');
+    const cdkeyMaxUsesCustom = document.getElementById('cdkeyMaxUsesCustom');
+    if (cdkeyMaxUsesSelect && cdkeyMaxUsesCustom) {
+        cdkeyMaxUsesSelect.addEventListener('change', () => {
+            if (cdkeyMaxUsesSelect.value === 'custom') {
+                cdkeyMaxUsesCustom.style.display = 'block';
+                cdkeyMaxUsesCustom.focus();
+            } else {
+                cdkeyMaxUsesCustom.style.display = 'none';
+            }
+        });
+    }
+
     // ---- Generate CDKEYs ----
     generateCdkeyBtn.addEventListener('click', async () => {
         const count = parseInt(cdkeyCount.value);
         const duration = cdkeyDuration.value;
+        const maxUsesSelectVal = cdkeyMaxUsesSelect ? cdkeyMaxUsesSelect.value : '0';
+        const maxUses = maxUsesSelectVal === 'custom' ? (parseInt(cdkeyMaxUsesCustom ? cdkeyMaxUsesCustom.value : 0) || 0) : (parseInt(maxUsesSelectVal) || 0);
 
         if (isNaN(count) || count < 1 || count > 100) {
             return showToast('生成数量需在 1-100 之间', 'error');
@@ -510,7 +541,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch('/api/admin/generate-keys', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ count, duration, password: adminPassword })
+                body: JSON.stringify({ count, duration, maxUses, password: adminPassword })
             });
 
             const data = await response.json();
@@ -524,7 +555,8 @@ document.addEventListener('DOMContentLoaded', () => {
             
             cdkeyResultWrapper.style.display = 'block';
             cdkeyResultList.value = keyStrings.join('\n');
-            showToast(`成功生成 ${keyStrings.length} 个【${formatDuration(duration)}】卡密`, 'success');
+            const usageDesc = maxUses > 0 ? `限用 ${maxUses} 次` : '不限次数';
+            showToast(`成功生成 ${keyStrings.length} 个【${formatDuration(duration)} · ${usageDesc}】卡密`, 'success');
 
             await fetchKeys();
         } catch (error) {
@@ -565,6 +597,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const importKeysTextarea = document.getElementById('importKeysTextarea');
     const importPreviewCount = document.getElementById('importPreviewCount');
     const importKeyDuration = document.getElementById('importKeyDuration');
+    const importKeyMaxUses = document.getElementById('importKeyMaxUses');
     const importKeyStatus = document.getElementById('importKeyStatus');
     const importKeyOverwrite = document.getElementById('importKeyOverwrite');
     const doImportKeysBtn = document.getElementById('doImportKeysBtn');
@@ -584,6 +617,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const duration = importKeyDuration ? importKeyDuration.value : '1m';
+            const maxUses = importKeyMaxUses ? (parseInt(importKeyMaxUses.value) || 0) : 0;
             const status = importKeyStatus ? importKeyStatus.value : 'unused';
             const overwrite = importKeyOverwrite ? importKeyOverwrite.checked : false;
 
@@ -597,6 +631,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     body: JSON.stringify({
                         keysText: rawText,
                         duration,
+                        maxUses,
                         status,
                         overwrite,
                         password: adminPassword
@@ -730,11 +765,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 content = fileHeader + keysToExport.map(k => k.key).join('\n');
             } else {
                 const lines = keysToExport.map(k => {
-                    const count = k.usedCount || 0;
-                    const statusName = k.status === 'unused' ? '待激活' : (k.status === 'expired' ? '已到期' : `生效中(已生成${count}次)`);
+                    const count = Number(k.usedCount) || 0;
+                    const maxUses = Number(k.maxUses) || 0;
+                    const quotaText = maxUses > 0 ? `${count}/${maxUses}次` : `${count}次(不限)`;
+                    const statusName = k.status === 'unused' ? '待激活' : (k.status === 'expired' ? '已到期' : (k.status === 'used' ? '已用完' : '生效中'));
                     const siteName = k.siteInfo ? (k.siteInfo.subdomain || k.siteInfo.siteId) : (count > 0 ? `已生成${count}个` : '-');
-                    const expText = (k.duration === 'forever' || k.duration === 'unlimited') ? '永久有效' : (k.expiresAt ? formatDate(k.expiresAt) : '首次使用起算');
-                    return `${k.key}\t|\t时长: ${formatDuration(k.duration)}\t|\t状态: ${statusName}\t|\t生成次数: ${count}\t|\t到期时间: ${expText}\t|\t站点: ${siteName}`;
+                    const expText = k.expiresAt ? formatDate(k.expiresAt) : '首次使用起算';
+                    return `${k.key}\t|\t时长: ${formatDuration(k.duration)}\t|\t使用额度: ${quotaText}\t|\t状态: ${statusName}\t|\t到期时间: ${expText}\t|\t站点: ${siteName}`;
                 });
                 content = fileHeader + lines.join('\n');
             }

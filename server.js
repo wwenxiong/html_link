@@ -473,6 +473,21 @@ function validateCDKey(cdkey) {
     return { valid: false, message: '卡密无效或不存在，请核对后重新输入' };
   }
 
+  // Check if max uses limit reached
+  const maxUses = Number(keyObj.maxUses) || 0;
+  const usedCount = Number(keyObj.usedCount) || 0;
+  if (maxUses > 0 && usedCount >= maxUses) {
+    if (keyObj.status !== 'used') {
+      keyObj.status = 'used';
+      db.cdkeys.save(keyObj);
+    }
+    return {
+      valid: false,
+      message: `该卡密已达到最大使用次数上限 (${usedCount}/${maxUses} 次)，无法继续使用`,
+      keyObj
+    };
+  }
+
   // Check if already expired
   if (keyObj.expiresAt && isExpired(keyObj.expiresAt)) {
     if (keyObj.status !== 'expired') {
@@ -492,18 +507,22 @@ function consumeCDKey(cdkey, siteId) {
   const keyObj = db.cdkeys.getByKey(cleanKey);
   if (!keyObj) return null;
 
-  const duration = keyObj.duration || 'forever';
-  const effectiveDuration = (duration === 'unlimited') ? 'forever' : duration;
+  const maxUses = Number(keyObj.maxUses) || 0;
+  const currentUsedCount = Number(keyObj.usedCount) || 0;
+  if (maxUses > 0 && currentUsedCount >= maxUses) {
+    keyObj.status = 'used';
+    db.cdkeys.save(keyObj);
+    return null;
+  }
+
+  const duration = keyObj.duration || '1m';
+  const effectiveDuration = (duration === 'forever' || duration === 'unlimited') ? '1y' : duration;
   const now = new Date();
 
-  // First time activation (if not previously activated and not permanent)
+  // First time activation
   if (!keyObj.activatedAt && !keyObj.expiresAt) {
     keyObj.activatedAt = now.toISOString();
-    if (effectiveDuration !== 'forever') {
-      keyObj.expiresAt = calculateExpiresAt(effectiveDuration, now);
-    } else {
-      keyObj.expiresAt = null;
-    }
+    keyObj.expiresAt = calculateExpiresAt(effectiveDuration, now);
   }
 
   // Check if expired
@@ -513,9 +532,13 @@ function consumeCDKey(cdkey, siteId) {
     return null;
   }
 
-  // Valid: increment usage count (allows unlimited generations within validity period)
-  keyObj.status = 'active';
-  keyObj.usedCount = (keyObj.usedCount || 0) + 1;
+  // Increment usage count
+  keyObj.usedCount = currentUsedCount + 1;
+  if (maxUses > 0 && keyObj.usedCount >= maxUses) {
+    keyObj.status = 'used';
+  } else {
+    keyObj.status = 'active';
+  }
   keyObj.lastUsedAt = now.toISOString();
   keyObj.lastUsedBySiteId = siteId;
   if (!keyObj.usedAt) {
@@ -1117,18 +1140,18 @@ app.post('/api/renew', async (req, res) => {
   }
 });
 
-// --- Admin: Generate CDKEYs (All unlimited generations within validity period) ---
+// --- Admin: Generate CDKEYs (Supports custom max uses & validity period) ---
 app.post('/api/admin/generate-keys', (req, res) => {
-  const { count, duration, password } = req.body;
+  const { count, duration, maxUses, password } = req.body;
 
   if (password !== ADMIN_PASSWORD) {
     return res.status(403).json({ success: false, message: '管理员密码错误' });
   }
 
-  const validDurations = ['3d', '1m', '6m', '1y'];
+  const validDurations = ['3d', '7d', '1m', '3m', '6m', '1y'];
   const validDuration = validDurations.includes(duration) ? duration : '1m';
   const num = Math.min(Math.max(parseInt(count) || 1, 1), 100);
-  const keys = getCDKeys();
+  const parsedMaxUses = Math.max(parseInt(maxUses) || 0, 0); // 0 = 不限次数
   const newKeys = [];
 
   for (let i = 0; i < num; i++) {
@@ -1141,27 +1164,28 @@ app.post('/api/admin/generate-keys', (req, res) => {
       activatedAt: null,
       usedAt: null,
       usedCount: 0,
+      maxUses: parsedMaxUses,
       lastUsedAt: null,
       usedBySiteId: null,
       lastUsedBySiteId: null,
       expiresAt: null
     };
-    keys.push(keyObj);
     newKeys.push(keyObj);
   }
 
-  saveCDKeys(keys);
+  db.cdkeys.saveAll(newKeys);
 
+  const usageDesc = parsedMaxUses > 0 ? `每张限用 ${parsedMaxUses} 次` : '有效期内不限次数';
   return res.json({
     success: true,
-    message: `成功生成 ${num} 个卡密（有效期内可无限次生成链接）`,
+    message: `成功生成 ${num} 个卡密（${usageDesc}）`,
     data: { keys: newKeys }
   });
 });
 
 // --- Admin: Import CDKEYs ---
 app.post('/api/admin/import-keys', (req, res) => {
-  const { keysText, duration, status, overwrite, password } = req.body || {};
+  const { keysText, duration, maxUses, status, overwrite, password } = req.body || {};
 
   if (password !== ADMIN_PASSWORD) {
     return res.status(403).json({ success: false, message: '管理员密码错误' });
@@ -1171,9 +1195,10 @@ app.post('/api/admin/import-keys', (req, res) => {
     return res.status(400).json({ success: false, message: '请输入要导入的卡密内容' });
   }
 
-  const validDurations = ['3d', '1m', '3m', '6m', '1y', 'forever', 'unlimited'];
+  const validDurations = ['3d', '7d', '1m', '3m', '6m', '1y'];
   const defaultDuration = validDurations.includes(duration) ? duration : '1m';
   const defaultStatus = ['unused', 'active', 'used'].includes(status) ? status : 'unused';
+  const defaultMaxUses = Math.max(parseInt(maxUses) || 0, 0);
   const shouldOverwrite = Boolean(overwrite);
 
   // Parse lines of input
@@ -1185,9 +1210,10 @@ app.post('/api/admin/import-keys', (req, res) => {
     let line = rawLine.trim();
     if (!line || line.startsWith('#') || line.startsWith('//')) continue;
 
-    // Support line format: KEY,DURATION,STATUS or KEY DURATION or plain KEY
+    // Support line format: KEY,DURATION,MAX_USES,STATUS or KEY,DURATION or plain KEY
     let lineKey = '';
     let lineDuration = defaultDuration;
+    let lineMaxUses = defaultMaxUses;
     let lineStatus = defaultStatus;
 
     if (line.includes(',') || line.includes('\t') || line.includes('|')) {
@@ -1198,7 +1224,15 @@ app.post('/api/admin/import-keys', (req, res) => {
         if (validDurations.includes(d)) lineDuration = d;
       }
       if (parts[2]) {
-        const s = parts[2].toLowerCase();
+        const mu = parseInt(parts[2]);
+        if (!isNaN(mu) && mu >= 0) {
+          lineMaxUses = mu;
+        } else if (['unused', 'active', 'used', 'expired'].includes(parts[2].toLowerCase())) {
+          lineStatus = parts[2].toLowerCase();
+        }
+      }
+      if (parts[3]) {
+        const s = parts[3].toLowerCase();
         if (['unused', 'active', 'used', 'expired'].includes(s)) lineStatus = s;
       }
     } else if (line.includes(' ')) {
@@ -1207,6 +1241,10 @@ app.post('/api/admin/import-keys', (req, res) => {
       if (parts[1]) {
         const d = parts[1].toLowerCase();
         if (validDurations.includes(d)) lineDuration = d;
+      }
+      if (parts[2]) {
+        const mu = parseInt(parts[2]);
+        if (!isNaN(mu) && mu >= 0) lineMaxUses = mu;
       }
     } else {
       lineKey = line;
@@ -1221,6 +1259,7 @@ app.post('/api/admin/import-keys', (req, res) => {
     parsedKeys.push({
       key: lineKey,
       duration: lineDuration,
+      maxUses: lineMaxUses,
       status: lineStatus
     });
   }
@@ -1239,6 +1278,7 @@ app.post('/api/admin/import-keys', (req, res) => {
     if (existing) {
       if (shouldOverwrite) {
         existing.duration = item.duration;
+        existing.maxUses = item.maxUses;
         existing.status = item.status;
         db.cdkeys.save(existing);
         updatedCount++;
@@ -1249,6 +1289,7 @@ app.post('/api/admin/import-keys', (req, res) => {
       const newKeyObj = {
         key: item.key,
         duration: item.duration,
+        maxUses: item.maxUses,
         status: item.status,
         createdAt: new Date().toISOString(),
         activatedAt: null,
@@ -1296,12 +1337,16 @@ app.get('/api/admin/keys', (req, res) => {
   const sites = db.sites.getAll();
 
   const enrichedKeys = keys.map(k => {
+    const maxUses = Number(k.maxUses) || 0;
+    const usedCount = Number(k.usedCount) || 0;
     let computedStatus = k.status || 'unused';
     let expiresAt = k.expiresAt || null;
 
     if (expiresAt && isExpired(expiresAt)) {
       computedStatus = 'expired';
-    } else if (k.activatedAt || (k.usedCount && k.usedCount > 0) || computedStatus === 'used' || computedStatus === 'active') {
+    } else if (maxUses > 0 && usedCount >= maxUses) {
+      computedStatus = 'used';
+    } else if (k.activatedAt || usedCount > 0 || computedStatus === 'active') {
       computedStatus = 'active';
     } else {
       computedStatus = 'unused';
@@ -1316,7 +1361,8 @@ app.get('/api/admin/keys', (req, res) => {
       status: computedStatus,
       duration: k.duration || '1m',
       expiresAt,
-      usedCount: k.usedCount || (linkedSites.length > 0 ? linkedSites.length : (k.status === 'used' ? 1 : 0)),
+      usedCount,
+      maxUses,
       siteInfo: site ? {
         siteId: site.siteId,
         subdomain: site.subdomain || site.customPath,
