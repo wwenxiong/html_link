@@ -603,7 +603,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     })
                 });
 
-                const data = await response.json();
+                let data;
+                const contentType = response.headers.get('content-type') || '';
+                if (contentType.includes('application/json')) {
+                    data = await response.json();
+                } else {
+                    const text = await response.text();
+                    if (response.status === 404) {
+                        throw new Error('未找到导入接口(404)，请检查服务器端 Node.js 服务是否已重启');
+                    }
+                    throw new Error(`服务器响应异常(${response.status}): ${text.slice(0, 100)}`);
+                }
+
                 if (!response.ok || !data.success) {
                     throw new Error(data.message || '导入失败');
                 }
