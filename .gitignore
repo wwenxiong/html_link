@@ -7,4 +7,9 @@ Thumbs.db
 *.zip
 public/_sites/
 data/*.json
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/*.sqlite
+data/*.bak
 !data/.gitkeep

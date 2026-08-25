@@ -23,34 +23,14 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin888';
 
-// ==================== Data Storage (JSON-based) ====================
-const DATA_DIR = path.join(__dirname, 'data');
-const CDKEYS_FILE = path.join(DATA_DIR, 'cdkeys.json');
-const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
-const SITES_FILE = path.join(DATA_DIR, 'sites.json');
+// ==================== Data Storage (SQLite / Database-backed) ====================
+const db = require('./lib/db');
 const LOCAL_SITES_DIR = path.join(__dirname, 'public', '_sites');
 
-// Ensure directories exist
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+// Ensure storage directories exist
 if (!fs.existsSync(LOCAL_SITES_DIR)) fs.mkdirSync(LOCAL_SITES_DIR, { recursive: true });
 
-// Initialize data files
-function loadJSON(filePath, defaultValue) {
-  try {
-    if (fs.existsSync(filePath)) {
-      return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    }
-  } catch (e) {
-    console.error(`Error loading ${filePath}:`, e.message);
-  }
-  return defaultValue;
-}
-
 const ENV_FILE = path.join(__dirname, '.env');
-
-function saveJSON(filePath, data) {
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
-}
 
 // Synchronize updates to .env file
 function updateEnvFile(updates = {}) {
@@ -95,7 +75,7 @@ function updateEnvFile(updates = {}) {
 const RESERVED_SUBDOMAINS = ['www', 'admin', 'api', 'app', 'static', 'public', 'assets', 'cdn', 'mail', 'blog', 'shop', 'dashboard', 'sites'];
 
 function getDomainConfig() {
-  const config = loadJSON(CONFIG_FILE, {});
+  const config = db.config.getAll();
   const primaryDomain = (config.primaryDomain || process.env.PRIMARY_DOMAIN || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
   const useHttps = config.useHttps !== undefined ? Boolean(config.useHttps) : (process.env.USE_HTTPS !== 'false');
   return { primaryDomain, useHttps };
@@ -103,7 +83,7 @@ function getDomainConfig() {
 
 // Clerk Authentication Helper
 function getClerkConfig() {
-  const config = loadJSON(CONFIG_FILE, {});
+  const config = db.config.getAll();
   const publishableKey = (config.clerkPublishableKey || process.env.CLERK_PUBLISHABLE_KEY || '').trim();
   const secretKey = (config.clerkSecretKey || process.env.CLERK_SECRET_KEY || '').trim();
   if (publishableKey && !process.env.CLERK_PUBLISHABLE_KEY) {
@@ -127,7 +107,7 @@ function isClerkConfigured() {
 
 // CDKEY Acquisition / Purchase Channel Helper
 function getCdkeyBuyConfig() {
-  const config = loadJSON(CONFIG_FILE, {});
+  const config = db.config.getAll();
   const cdkeyBuyUrl = (config.cdkeyBuyUrl !== undefined ? config.cdkeyBuyUrl : (process.env.CDKEY_BUY_URL || '')).trim();
   const cdkeyBuyText = (config.cdkeyBuyText !== undefined ? config.cdkeyBuyText : (process.env.CDKEY_BUY_TEXT || '获取卡密')).trim();
   return { cdkeyBuyUrl, cdkeyBuyText };
@@ -306,14 +286,9 @@ app.use((req, res, next) => {
     return next();
   }
 
-  // Lookup site in sites.json
-  const sites = loadJSON(SITES_FILE, []);
+  // Lookup site in database
   const cleanSub = subdomain.toLowerCase();
-  const site = sites.find(s => 
-    (s.subdomain && s.subdomain.toLowerCase() === cleanSub) || 
-    (s.customPath && s.customPath.toLowerCase() === cleanSub) || 
-    (s.siteId && s.siteId.toLowerCase() === cleanSub)
-  );
+  const site = db.sites.findByDomainOrId(cleanSub);
 
   if (!site) {
     return res.status(404).send(`
@@ -381,8 +356,7 @@ app.use((req, res, next) => {
 // Middleware for local site direct access expiration check
 app.use('/_sites/sites/:siteId', (req, res, next) => {
   const { siteId } = req.params;
-  const sites = loadJSON(SITES_FILE, []);
-  const site = sites.find(s => s.siteId === siteId || s.subdomain === siteId || s.customPath === siteId);
+  const site = db.sites.findByDomainOrId(siteId);
   if (site) {
     const siteExp = getSiteEffectiveExpiration(site);
     if (siteExp.isExpired) {
@@ -395,7 +369,7 @@ app.use('/_sites/sites/:siteId', (req, res, next) => {
 
 // ==================== Maintenance Mode Middleware ====================
 app.use((req, res, next) => {
-  const config = loadJSON(CONFIG_FILE, {});
+  const config = db.config.getAll();
   const isMaintenance = process.env.MAINTENANCE_MODE === 'true' || config.maintenanceMode === true;
 
   if (isMaintenance) {
@@ -426,7 +400,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // ==================== R2 / S3 Client ====================
 function getR2Config() {
-  const config = loadJSON(CONFIG_FILE, {});
+  const config = db.config.getAll();
   return {
     accountId: config.accountId || process.env.R2_ACCOUNT_ID || '',
     accessKeyId: config.accessKeyId || process.env.R2_ACCESS_KEY_ID || '',
@@ -484,18 +458,17 @@ function uploadFileToLocal(fileBuffer, key) {
 
 // ==================== CDKEY Management ====================
 function getCDKeys() {
-  return loadJSON(CDKEYS_FILE, []);
+  return db.cdkeys.getAll();
 }
 
 function saveCDKeys(keys) {
-  saveJSON(CDKEYS_FILE, keys);
+  db.cdkeys.saveAll(keys);
 }
 
 function validateCDKey(cdkey) {
   if (!cdkey) return { valid: false, message: '请输入卡密 (CDKEY)' };
   const cleanKey = cdkey.trim().toUpperCase();
-  const keys = getCDKeys();
-  const keyObj = keys.find(k => k.key && k.key.toUpperCase() === cleanKey);
+  const keyObj = db.cdkeys.getByKey(cleanKey);
   if (!keyObj) {
     return { valid: false, message: '卡密无效或不存在，请核对后重新输入' };
   }
@@ -504,7 +477,7 @@ function validateCDKey(cdkey) {
   if (keyObj.expiresAt && isExpired(keyObj.expiresAt)) {
     if (keyObj.status !== 'expired') {
       keyObj.status = 'expired';
-      saveCDKeys(keys);
+      db.cdkeys.save(keyObj);
     }
     const expStr = new Date(keyObj.expiresAt).toLocaleString('zh-CN');
     return { valid: false, message: `该卡密已于 ${expStr} 到期失效，无法继续生成链接`, keyObj, expired: true };
@@ -516,11 +489,9 @@ function validateCDKey(cdkey) {
 function consumeCDKey(cdkey, siteId) {
   if (!cdkey) return null;
   const cleanKey = cdkey.trim().toUpperCase();
-  const keys = getCDKeys();
-  const idx = keys.findIndex(k => k.key && k.key.toUpperCase() === cleanKey);
-  if (idx === -1) return null;
+  const keyObj = db.cdkeys.getByKey(cleanKey);
+  if (!keyObj) return null;
 
-  const keyObj = keys[idx];
   const duration = keyObj.duration || 'forever';
   const effectiveDuration = (duration === 'unlimited') ? 'forever' : duration;
   const now = new Date();
@@ -538,7 +509,7 @@ function consumeCDKey(cdkey, siteId) {
   // Check if expired
   if (keyObj.expiresAt && isExpired(keyObj.expiresAt)) {
     keyObj.status = 'expired';
-    saveCDKeys(keys);
+    db.cdkeys.save(keyObj);
     return null;
   }
 
@@ -552,7 +523,7 @@ function consumeCDKey(cdkey, siteId) {
     keyObj.usedBySiteId = siteId;
   }
 
-  saveCDKeys(keys);
+  db.cdkeys.save(keyObj);
   return { ...keyObj, duration: effectiveDuration, expiresAt: keyObj.expiresAt };
 }
 
@@ -569,14 +540,8 @@ function generateCDKeyString() {
   return 'HTML-' + segments.join('-');
 }
 
-function generateRandomSubdomain(sites = []) {
+function generateRandomSubdomain() {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  const existingSet = new Set();
-  sites.forEach(s => {
-    if (s.subdomain) existingSet.add(s.subdomain.toLowerCase());
-    if (s.customPath) existingSet.add(s.customPath.toLowerCase());
-    if (s.siteId) existingSet.add(s.siteId.toLowerCase());
-  });
 
   // Try generating unique 3 to 4 character random string
   for (let attempt = 0; attempt < 500; attempt++) {
@@ -586,7 +551,7 @@ function generateRandomSubdomain(sites = []) {
     for (let i = 0; i < len; i++) {
       code += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-    if (!existingSet.has(code) && !RESERVED_SUBDOMAINS.includes(code)) {
+    if (!RESERVED_SUBDOMAINS.includes(code) && !db.sites.isDomainTaken(code)) {
       return code;
     }
   }
@@ -722,8 +687,7 @@ app.get('/api/check-path', (req, res) => {
   }
 
   // Check if already used
-  const sites = loadJSON(SITES_FILE, []);
-  const conflict = sites.some(s => s.customPath === sub || s.subdomain === sub || s.siteId === sub);
+  const conflict = db.sites.isDomainTaken(sub);
   return res.json({ available: !conflict, reason: conflict ? 'taken' : null });
 });
 
@@ -785,8 +749,7 @@ app.post('/api/deploy', upload.single('file'), async (req, res) => {
         });
       }
       // Check for conflicts
-      const sites = loadJSON(SITES_FILE, []);
-      if (sites.some(s => s.customPath === customPath || s.subdomain === customPath || s.siteId === customPath)) {
+      if (db.sites.isDomainTaken(customPath)) {
         return res.status(400).json({
           success: false,
           message: `二级域名「${customPath}」已被占用，请换一个名称`
@@ -794,8 +757,7 @@ app.post('/api/deploy', upload.single('file'), async (req, res) => {
       }
       siteId = customPath;
     } else {
-      const sites = loadJSON(SITES_FILE, []);
-      siteId = generateRandomSubdomain(sites);
+      siteId = generateRandomSubdomain();
     }
 
 
@@ -950,7 +912,6 @@ app.post('/api/deploy', upload.single('file'), async (req, res) => {
     const siteExpiresAt = calculateExpiresAt(keyDuration, new Date());
 
     // 6. Record the site
-    const sites = loadJSON(SITES_FILE, []);
     const siteRecord = {
       siteId,
       subdomain: customPath || siteId,
@@ -966,8 +927,7 @@ app.post('/api/deploy', upload.single('file'), async (req, res) => {
       createdAt: new Date().toISOString()
     };
     if (customPath) siteRecord.customPath = customPath;
-    sites.push(siteRecord);
-    saveJSON(SITES_FILE, sites);
+    db.sites.save(siteRecord);
 
     // 7. Return success
     return res.json({
@@ -1005,12 +965,7 @@ app.get('/api/site-status', (req, res) => {
       cleanSub = cleanSub.slice(0, -(primaryDomain.length + 1));
     }
 
-    const sites = loadJSON(SITES_FILE, []);
-    const site = sites.find(s => 
-      (s.subdomain && s.subdomain.toLowerCase() === cleanSub) || 
-      (s.customPath && s.customPath.toLowerCase() === cleanSub) || 
-      (s.siteId && s.siteId.toLowerCase() === cleanSub)
-    );
+    const site = db.sites.findByDomainOrId(cleanSub);
 
     if (!site) {
       return res.status(404).json({ success: false, message: `未找到域名/名称为「${cleanSub}」的已部署站点` });
@@ -1098,19 +1053,12 @@ app.post('/api/renew', async (req, res) => {
     }
     const keyObj = keyValidation.keyObj;
 
-    // 2. Find site in sites.json
-    const sites = loadJSON(SITES_FILE, []);
-    const siteIndex = sites.findIndex(s => 
-      (s.subdomain && s.subdomain.toLowerCase() === cleanSub) || 
-      (s.customPath && s.customPath.toLowerCase() === cleanSub) || 
-      (s.siteId && s.siteId.toLowerCase() === cleanSub)
-    );
+    // 2. Find site in database
+    const targetSite = db.sites.findByDomainOrId(cleanSub);
 
-    if (siteIndex === -1) {
+    if (!targetSite) {
       return res.status(404).json({ success: false, message: `未找到域名/名称为「${cleanSub}」的已部署站点` });
     }
-
-    const targetSite = sites[siteIndex];
 
     // Check user auth to optionally link if unlinked
     try {
@@ -1147,8 +1095,7 @@ app.post('/api/renew', async (req, res) => {
     targetSite.renewedAt = new Date().toISOString();
     targetSite.lastCdkey = cleanKey;
 
-    sites[siteIndex] = targetSite;
-    saveJSON(SITES_FILE, sites);
+    db.sites.save(targetSite);
 
     const siteUrl = targetSite.url || buildSiteUrl(targetSite.subdomain || targetSite.siteId, targetSite.siteId);
 
@@ -1221,7 +1168,7 @@ app.get('/api/admin/keys', (req, res) => {
   }
 
   const keys = getCDKeys();
-  const sites = loadJSON(SITES_FILE, []);
+  const sites = db.sites.getAll();
 
   const enrichedKeys = keys.map(k => {
     let computedStatus = k.status || 'unused';
@@ -1265,40 +1212,53 @@ app.delete('/api/admin/keys', (req, res) => {
     return res.status(403).json({ success: false, message: '管理员密码错误' });
   }
 
-  let keys = getCDKeys();
+  let keys = db.cdkeys.getAll();
   const beforeCount = keys.length;
 
   if (deleteExpired) {
-    keys = keys.filter(k => !(k.expiresAt && isExpired(k.expiresAt)) && k.status !== 'expired');
-    saveCDKeys(keys);
-    const removed = beforeCount - keys.length;
+    let removed = 0;
+    keys.forEach(k => {
+      if ((k.expiresAt && isExpired(k.expiresAt)) || k.status === 'expired') {
+        db.cdkeys.delete(k.key);
+        removed++;
+      }
+    });
     return res.json({ success: true, message: `已成功清理 ${removed} 个已到期卡密！` });
   } else if (deleteUsed || deleteActive) {
-    keys = keys.filter(k => {
+    let removed = 0;
+    keys.forEach(k => {
       const isAct = (k.status === 'active' || k.status === 'used' || (k.usedCount && k.usedCount > 0)) && !(k.expiresAt && isExpired(k.expiresAt));
-      return !isAct;
+      if (isAct) {
+        db.cdkeys.delete(k.key);
+        removed++;
+      }
     });
-    saveCDKeys(keys);
-    const removed = beforeCount - keys.length;
     return res.json({ success: true, message: `已成功清理 ${removed} 个生效中卡密！` });
   } else if (deleteUnused) {
-    keys = keys.filter(k => k.status !== 'unused' || (k.usedCount && k.usedCount > 0) || k.activatedAt);
-    saveCDKeys(keys);
-    const removed = beforeCount - keys.length;
+    let removed = 0;
+    keys.forEach(k => {
+      if (k.status === 'unused' && (!k.usedCount || k.usedCount === 0) && !k.activatedAt) {
+        db.cdkeys.delete(k.key);
+        removed++;
+      }
+    });
     return res.json({ success: true, message: `已成功清理 ${removed} 个未激活卡密！` });
   } else if (deleteDuration) {
-    keys = keys.filter(k => k.duration !== deleteDuration);
-    saveCDKeys(keys);
-    const removed = beforeCount - keys.length;
+    let removed = 0;
+    keys.forEach(k => {
+      if (k.duration === deleteDuration) {
+        db.cdkeys.delete(k.key);
+        removed++;
+      }
+    });
     const durName = { '3d': '3天体验卡', '1m': '1个月月卡', '6m': '半年卡(6个月)', '1y': '1年年卡', '3m': '3个月季卡', '7d': '7天周卡', 'forever': '永久有效卡' }[deleteDuration] || deleteDuration;
     return res.json({ success: true, message: `已成功清理 ${removed} 个【${durName}】类型的卡密！` });
   } else if (deleteAll) {
-    saveCDKeys([]);
+    db.cdkeys.cleanByType('all');
     return res.json({ success: true, message: `已清空全部 ${beforeCount} 个卡密！` });
   } else if (key) {
     const cleanKey = key.trim().toUpperCase();
-    keys = keys.filter(k => k.key.toUpperCase() !== cleanKey);
-    saveCDKeys(keys);
+    db.cdkeys.delete(cleanKey);
     return res.json({ success: true, message: `已成功删除卡密「${key}」` });
   }
 
@@ -1313,7 +1273,7 @@ app.get('/api/admin/sites', (req, res) => {
     return res.status(403).json({ success: false, message: '管理员密码错误' });
   }
 
-  const sites = loadJSON(SITES_FILE, []);
+  const sites = db.sites.getAll();
   const enrichedSites = sites.map(s => {
     const exp = getSiteEffectiveExpiration(s);
     return {
@@ -1340,14 +1300,11 @@ app.delete('/api/admin/sites', (req, res) => {
     return res.status(400).json({ success: false, message: '请提供站点 ID' });
   }
 
-  let sites = loadJSON(SITES_FILE, []);
-  const siteIndex = sites.findIndex(s => s.siteId === siteId);
+  const targetSite = db.sites.getById(siteId);
 
-  if (siteIndex === -1) {
+  if (!targetSite) {
     return res.status(404).json({ success: false, message: '未找到指定站点' });
   }
-
-  const targetSite = sites[siteIndex];
 
   // Remove local directory if stored locally
   if (targetSite.storage === 'local' || !isR2Configured()) {
@@ -1361,8 +1318,7 @@ app.delete('/api/admin/sites', (req, res) => {
     }
   }
 
-  sites.splice(siteIndex, 1);
-  saveJSON(SITES_FILE, sites);
+  db.sites.delete(siteId);
 
   return res.json({ success: true, message: `已成功删除站点「${siteId}」` });
 });
@@ -1401,7 +1357,7 @@ app.post('/api/admin/r2-config', (req, res) => {
   }
 
   // Load existing config and merge (don't overwrite secret if masked)
-  const existing = loadJSON(CONFIG_FILE, {});
+  const existing = db.config.getAll();
   const newConfig = {
     accountId: config.accountId || '',
     accessKeyId: config.accessKeyId || '',
@@ -1417,7 +1373,7 @@ app.post('/api/admin/r2-config', (req, res) => {
     newConfig.publicDomain = 'https://' + newConfig.publicDomain;
   }
 
-  saveJSON(CONFIG_FILE, newConfig);
+  db.config.setMultiple(newConfig);
 
   const envUpdates = {
     R2_ACCOUNT_ID: newConfig.accountId,
@@ -1477,16 +1433,17 @@ app.post('/api/admin/domain-config', (req, res) => {
     return res.status(403).json({ success: false, message: '管理员密码错误' });
   }
 
-  const config = loadJSON(CONFIG_FILE, {});
   const cleanDomain = (primaryDomain || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
-  config.primaryDomain = cleanDomain;
-  config.useHttps = useHttps === true || useHttps === 'true';
+  const configUseHttps = useHttps === true || useHttps === 'true';
 
-  saveJSON(CONFIG_FILE, config);
+  db.config.setMultiple({
+    primaryDomain: cleanDomain,
+    useHttps: configUseHttps
+  });
 
   updateEnvFile({
-    PRIMARY_DOMAIN: config.primaryDomain,
-    USE_HTTPS: config.useHttps ? 'true' : 'false'
+    PRIMARY_DOMAIN: cleanDomain,
+    USE_HTTPS: configUseHttps ? 'true' : 'false'
   });
 
   return res.json({
@@ -1515,15 +1472,17 @@ app.post('/api/admin/cdkey-buy-config', (req, res) => {
     return res.status(403).json({ success: false, message: '管理员密码错误' });
   }
 
-  const config = loadJSON(CONFIG_FILE, {});
-  config.cdkeyBuyUrl = (cdkeyBuyUrl || '').trim();
-  config.cdkeyBuyText = (cdkeyBuyText || '').trim() || '获取卡密';
+  const cleanBuyUrl = (cdkeyBuyUrl || '').trim();
+  const cleanBuyText = (cdkeyBuyText || '').trim() || '获取卡密';
 
-  saveJSON(CONFIG_FILE, config);
+  db.config.setMultiple({
+    cdkeyBuyUrl: cleanBuyUrl,
+    cdkeyBuyText: cleanBuyText
+  });
 
   updateEnvFile({
-    CDKEY_BUY_URL: config.cdkeyBuyUrl,
-    CDKEY_BUY_TEXT: config.cdkeyBuyText
+    CDKEY_BUY_URL: cleanBuyUrl,
+    CDKEY_BUY_TEXT: cleanBuyText
   });
 
   return res.json({
@@ -1591,9 +1550,8 @@ app.get('/api/user/me', async (req, res) => {
       });
     }
 
-    const sites = loadJSON(SITES_FILE, []);
+    const sites = db.sites.findByUserIdOrEmail(auth.userId, userEmail);
     const userSites = sites
-      .filter(s => s.userId === auth.userId || (userEmail && s.userEmail && s.userEmail.toLowerCase() === userEmail.toLowerCase()))
       .map(s => {
         const exp = getSiteEffectiveExpiration(s);
         return {
@@ -1603,8 +1561,7 @@ app.get('/api/user/me', async (req, res) => {
           url: s.url || buildSiteUrl(s.subdomain || s.siteId, s.siteId),
           isExpired: exp.isExpired
         };
-      })
-      .reverse();
+      });
 
     return res.json({
       success: true,
@@ -1641,14 +1598,13 @@ app.delete('/api/user/sites', async (req, res) => {
       } catch (e) {}
     }
 
-    let sites = loadJSON(SITES_FILE, []);
-    const siteIndex = sites.findIndex(s => s.siteId === siteId && (s.userId === auth.userId || (userEmail && s.userEmail && s.userEmail.toLowerCase() === userEmail.toLowerCase())));
+    const userSites = db.sites.findByUserIdOrEmail(auth.userId, userEmail);
+    const targetSite = userSites.find(s => s.siteId === siteId);
 
-    if (siteIndex === -1) {
+    if (!targetSite) {
       return res.status(404).json({ success: false, message: '未找到指定站点或无权删除' });
     }
 
-    const targetSite = sites[siteIndex];
     if (targetSite.storage === 'local' || !isR2Configured()) {
       const localDir = path.join(LOCAL_SITES_DIR, 'sites', siteId);
       if (fs.existsSync(localDir)) {
@@ -1660,8 +1616,7 @@ app.delete('/api/user/sites', async (req, res) => {
       }
     }
 
-    sites.splice(siteIndex, 1);
-    saveJSON(SITES_FILE, sites);
+    db.sites.delete(siteId);
 
     return res.json({ success: true, message: `已成功删除站点「${siteId}」` });
   } catch (err) {
@@ -1696,24 +1651,24 @@ app.post('/api/admin/clerk-config', (req, res) => {
     return res.status(403).json({ success: false, message: '管理员密码错误' });
   }
 
-  const config = loadJSON(CONFIG_FILE, {});
+  const clerkUpdates = {};
   if (publishableKey !== undefined) {
-    config.clerkPublishableKey = (publishableKey || '').trim();
-    process.env.CLERK_PUBLISHABLE_KEY = config.clerkPublishableKey;
+    clerkUpdates.clerkPublishableKey = (publishableKey || '').trim();
+    process.env.CLERK_PUBLISHABLE_KEY = clerkUpdates.clerkPublishableKey;
   }
   if (secretKey !== undefined && !secretKey.startsWith('****')) {
-    config.clerkSecretKey = (secretKey || '').trim();
-    process.env.CLERK_SECRET_KEY = config.clerkSecretKey;
+    clerkUpdates.clerkSecretKey = (secretKey || '').trim();
+    process.env.CLERK_SECRET_KEY = clerkUpdates.clerkSecretKey;
   }
 
-  saveJSON(CONFIG_FILE, config);
+  db.config.setMultiple(clerkUpdates);
 
   const envUpdates = {};
   if (publishableKey !== undefined) {
-    envUpdates.CLERK_PUBLISHABLE_KEY = config.clerkPublishableKey;
+    envUpdates.CLERK_PUBLISHABLE_KEY = clerkUpdates.clerkPublishableKey;
   }
   if (secretKey !== undefined && !secretKey.startsWith('****')) {
-    envUpdates.CLERK_SECRET_KEY = config.clerkSecretKey;
+    envUpdates.CLERK_SECRET_KEY = clerkUpdates.clerkSecretKey;
   }
   updateEnvFile(envUpdates);
 
@@ -1721,8 +1676,8 @@ app.post('/api/admin/clerk-config', (req, res) => {
     success: true,
     message: 'Clerk 用户认证配置已保存！',
     data: {
-      publishableKey: config.clerkPublishableKey || '',
-      isConfigured: !!(config.clerkPublishableKey && config.clerkSecretKey)
+      publishableKey: clerkUpdates.clerkPublishableKey || '',
+      isConfigured: !!(clerkUpdates.clerkPublishableKey && clerkUpdates.clerkSecretKey)
     }
   });
 });
