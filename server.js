@@ -1159,6 +1159,131 @@ app.post('/api/admin/generate-keys', (req, res) => {
   });
 });
 
+// --- Admin: Import CDKEYs ---
+app.post('/api/admin/import-keys', (req, res) => {
+  const { keysText, duration, status, overwrite, password } = req.body || {};
+
+  if (password !== ADMIN_PASSWORD) {
+    return res.status(403).json({ success: false, message: '管理员密码错误' });
+  }
+
+  if (!keysText || !keysText.trim()) {
+    return res.status(400).json({ success: false, message: '请输入要导入的卡密内容' });
+  }
+
+  const validDurations = ['3d', '1m', '3m', '6m', '1y', 'forever', 'unlimited'];
+  const defaultDuration = validDurations.includes(duration) ? duration : '1m';
+  const defaultStatus = ['unused', 'active', 'used'].includes(status) ? status : 'unused';
+  const shouldOverwrite = Boolean(overwrite);
+
+  // Parse lines of input
+  const lines = keysText.split(/\r?\n/);
+  const parsedKeys = [];
+  const seenKeysInInput = new Set();
+
+  for (let rawLine of lines) {
+    let line = rawLine.trim();
+    if (!line || line.startsWith('#') || line.startsWith('//')) continue;
+
+    // Support line format: KEY,DURATION,STATUS or KEY DURATION or plain KEY
+    let lineKey = '';
+    let lineDuration = defaultDuration;
+    let lineStatus = defaultStatus;
+
+    if (line.includes(',') || line.includes('\t') || line.includes('|')) {
+      const parts = line.split(/[,|\t]+/).map(p => p.trim()).filter(Boolean);
+      lineKey = parts[0];
+      if (parts[1]) {
+        const d = parts[1].toLowerCase();
+        if (validDurations.includes(d)) lineDuration = d;
+      }
+      if (parts[2]) {
+        const s = parts[2].toLowerCase();
+        if (['unused', 'active', 'used', 'expired'].includes(s)) lineStatus = s;
+      }
+    } else if (line.includes(' ')) {
+      const parts = line.split(/\s+/).map(p => p.trim()).filter(Boolean);
+      lineKey = parts[0];
+      if (parts[1]) {
+        const d = parts[1].toLowerCase();
+        if (validDurations.includes(d)) lineDuration = d;
+      }
+    } else {
+      lineKey = line;
+    }
+
+    lineKey = lineKey.trim().toUpperCase();
+    if (lineKey.length < 4) continue;
+
+    if (seenKeysInInput.has(lineKey)) continue;
+    seenKeysInInput.add(lineKey);
+
+    parsedKeys.push({
+      key: lineKey,
+      duration: lineDuration,
+      status: lineStatus
+    });
+  }
+
+  if (parsedKeys.length === 0) {
+    return res.status(400).json({ success: false, message: '未在输入内容中识别到有效的卡密格式' });
+  }
+
+  let importedCount = 0;
+  let skippedCount = 0;
+  let updatedCount = 0;
+  const newKeyObjects = [];
+
+  for (const item of parsedKeys) {
+    const existing = db.cdkeys.getByKey(item.key);
+    if (existing) {
+      if (shouldOverwrite) {
+        existing.duration = item.duration;
+        existing.status = item.status;
+        db.cdkeys.save(existing);
+        updatedCount++;
+      } else {
+        skippedCount++;
+      }
+    } else {
+      const newKeyObj = {
+        key: item.key,
+        duration: item.duration,
+        status: item.status,
+        createdAt: new Date().toISOString(),
+        activatedAt: null,
+        usedAt: null,
+        usedCount: 0,
+        lastUsedAt: null,
+        usedBySiteId: null,
+        lastUsedBySiteId: null,
+        expiresAt: null
+      };
+      newKeyObjects.push(newKeyObj);
+      importedCount++;
+    }
+  }
+
+  if (newKeyObjects.length > 0) {
+    db.cdkeys.saveAll(newKeyObjects);
+  }
+
+  let msg = `成功导入 ${importedCount} 个新卡密`;
+  if (updatedCount > 0) msg += `，覆盖更新 ${updatedCount} 个卡密`;
+  if (skippedCount > 0) msg += `，跳过 ${skippedCount} 个已存在卡密`;
+
+  return res.json({
+    success: true,
+    message: msg,
+    data: {
+      importedCount,
+      updatedCount,
+      skippedCount,
+      totalParsed: parsedKeys.length
+    }
+  });
+});
+
 // --- Admin: Get CDKEY list ---
 app.get('/api/admin/keys', (req, res) => {
   const { password } = req.query;

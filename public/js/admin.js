@@ -531,9 +531,96 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast(error.message || '生成失败', 'error');
         } finally {
             generateCdkeyBtn.disabled = false;
-            generateCdkeyBtn.textContent = '⚡ 生成卡密';
+            generateCdkeyBtn.textContent = '立即生成';
         }
     });
+
+    // ---- Mode Switcher: Generate vs Import ----
+    const tabModeGenerate = document.getElementById('tabModeGenerate');
+    const tabModeImport = document.getElementById('tabModeImport');
+    const panelGenerateKeys = document.getElementById('panelGenerateKeys');
+    const panelImportKeys = document.getElementById('panelImportKeys');
+
+    if (tabModeGenerate && tabModeImport && panelGenerateKeys && panelImportKeys) {
+        tabModeGenerate.addEventListener('click', () => {
+            tabModeGenerate.classList.add('active', 'btn-primary');
+            tabModeGenerate.classList.remove('btn-outline');
+            tabModeImport.classList.remove('active', 'btn-primary');
+            tabModeImport.classList.add('btn-outline');
+            panelGenerateKeys.style.display = 'block';
+            panelImportKeys.style.display = 'none';
+        });
+
+        tabModeImport.addEventListener('click', () => {
+            tabModeImport.classList.add('active', 'btn-primary');
+            tabModeImport.classList.remove('btn-outline');
+            tabModeGenerate.classList.remove('active', 'btn-primary');
+            tabModeGenerate.classList.add('btn-outline');
+            panelImportKeys.style.display = 'block';
+            panelGenerateKeys.style.display = 'none';
+        });
+    }
+
+    // ---- Import Keys Logic ----
+    const importKeysTextarea = document.getElementById('importKeysTextarea');
+    const importPreviewCount = document.getElementById('importPreviewCount');
+    const importKeyDuration = document.getElementById('importKeyDuration');
+    const importKeyStatus = document.getElementById('importKeyStatus');
+    const importKeyOverwrite = document.getElementById('importKeyOverwrite');
+    const doImportKeysBtn = document.getElementById('doImportKeysBtn');
+
+    if (importKeysTextarea && importPreviewCount) {
+        importKeysTextarea.addEventListener('input', () => {
+            const lines = importKeysTextarea.value.split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith('#') && !l.startsWith('//'));
+            importPreviewCount.textContent = `已识别 ${lines.length} 条有效卡密`;
+        });
+    }
+
+    if (doImportKeysBtn) {
+        doImportKeysBtn.addEventListener('click', async () => {
+            const rawText = importKeysTextarea ? importKeysTextarea.value.trim() : '';
+            if (!rawText) {
+                return showToast('请先输入或粘贴要导入的卡密', 'error');
+            }
+
+            const duration = importKeyDuration ? importKeyDuration.value : '1m';
+            const status = importKeyStatus ? importKeyStatus.value : 'unused';
+            const overwrite = importKeyOverwrite ? importKeyOverwrite.checked : false;
+
+            doImportKeysBtn.disabled = true;
+            doImportKeysBtn.textContent = '导入中...';
+
+            try {
+                const response = await fetch('/api/admin/import-keys', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        keysText: rawText,
+                        duration,
+                        status,
+                        overwrite,
+                        password: adminPassword
+                    })
+                });
+
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || '导入失败');
+                }
+
+                showToast(data.message || '导入成功！', 'success');
+                if (importKeysTextarea) importKeysTextarea.value = '';
+                if (importPreviewCount) importPreviewCount.textContent = '已输入 0 行';
+
+                await fetchKeys();
+            } catch (error) {
+                showToast(error.message || '导入出错', 'error');
+            } finally {
+                doImportKeysBtn.disabled = false;
+                doImportKeysBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -1px; margin-right: 3px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>确认导入';
+            }
+        });
+    }
 
     function downloadTextFile(filename, textContent) {
         const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });

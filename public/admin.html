@@ -427,8 +427,20 @@
                     </button>
                 </div>
 
-                <!-- Generate Keys Form -->
-                <div style="background: var(--mac-surface); border: 1px solid var(--mac-border); border-radius: 12px; padding: 16px; margin-bottom: 16px;">
+                <!-- Mode Switcher: Generate vs Import -->
+                <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                    <button type="button" class="btn btn-primary btn-sm cdkey-tab-btn active" id="tabModeGenerate" style="border-radius: 8px; font-weight: 600;">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -1px; margin-right: 4px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                        批量生成新卡密
+                    </button>
+                    <button type="button" class="btn btn-outline btn-sm cdkey-tab-btn" id="tabModeImport" style="border-radius: 8px; font-weight: 600; color: var(--mac-blue);">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -1px; margin-right: 4px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        📥 导入历史/已有卡密
+                    </button>
+                </div>
+
+                <!-- 1. Generate Keys Form -->
+                <div id="panelGenerateKeys" style="background: var(--mac-surface); border: 1px solid var(--mac-border); border-radius: 12px; padding: 16px; margin-bottom: 16px;">
                     <h4 style="font-size: 13px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                         批量生成新卡密（全类型支持有效期内无限次生成链接）
@@ -449,6 +461,59 @@
                             </select>
                         </div>
                         <button class="btn btn-primary" id="generateCdkeyBtn" style="height: 42px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>立即生成</button>
+                    </div>
+                </div>
+
+                <!-- 2. Import Keys Form (Hidden by default) -->
+                <div id="panelImportKeys" style="background: var(--mac-surface); border: 1px solid var(--mac-border); border-radius: 12px; padding: 16px; margin-bottom: 16px; display: none;">
+                    <h4 style="font-size: 13px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        批量导入历史卡密
+                    </h4>
+                    <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 10px;">
+                        支持直接粘贴之前导出的 TXT 文本、发卡平台卡密列表或批量字符串。系统将自动过滤并批量存入数据库。
+                    </p>
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                            <label style="font-size: 12px; color: var(--text-secondary); margin: 0;">卡密列表 (每行一个，或以逗号/空格分隔)</label>
+                            <span id="importPreviewCount" style="font-size: 11.5px; color: var(--mac-blue); font-weight: 600;">已输入 0 行</span>
+                        </div>
+                        <textarea class="admin-input" id="importKeysTextarea" rows="5" style="font-family: monospace; font-size: 12px; resize: vertical; line-height: 1.5;" placeholder="例如：
+HTML-JMBP-C77H-5J5X-BWH4
+HTML-NNZ5-5H7G-UAQU-8HVZ
+HTML-FZDD-KSJD-HSHB-XN4B,3d
+HTML-WDU3-P3MX-26B4-RWFH,1y"></textarea>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 140px; gap: 12px; align-items: flex-end;">
+                        <div class="form-group" style="margin: 0;">
+                            <label style="font-size: 12px; color: var(--text-secondary);">默认有效时长</label>
+                            <select class="admin-input" id="importKeyDuration">
+                                <option value="3d">3 天 (体验卡)</option>
+                                <option value="1m" selected>1 个月 (月卡)</option>
+                                <option value="3m">3 个月 (季卡)</option>
+                                <option value="6m">半年 (半年卡)</option>
+                                <option value="1y">1 年 (年卡)</option>
+                                <option value="forever">永久有效卡</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label style="font-size: 12px; color: var(--text-secondary);">初始激活状态</label>
+                            <select class="admin-input" id="importKeyStatus">
+                                <option value="unused" selected>待激活 (用户使用时激活)</option>
+                                <option value="active">生效中 (已处于可用状态)</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin: 0; display: flex; align-items: center; height: 38px;">
+                            <label style="font-size: 12px; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none;">
+                                <input type="checkbox" id="importKeyOverwrite" style="cursor: pointer;">
+                                覆盖已存在的卡密
+                            </label>
+                        </div>
+                        <button class="btn btn-primary" id="doImportKeysBtn" style="height: 40px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -1px; margin-right: 3px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            确认导入
+                        </button>
                     </div>
                 </div>
 
