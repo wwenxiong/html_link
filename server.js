@@ -307,7 +307,12 @@ app.use((req, res, next) => {
 
   // Lookup site in sites.json
   const sites = loadJSON(SITES_FILE, []);
-  const site = sites.find(s => (s.subdomain && s.subdomain === subdomain) || s.customPath === subdomain || s.siteId === subdomain);
+  const cleanSub = subdomain.toLowerCase();
+  const site = sites.find(s => 
+    (s.subdomain && s.subdomain.toLowerCase() === cleanSub) || 
+    (s.customPath && s.customPath.toLowerCase() === cleanSub) || 
+    (s.siteId && s.siteId.toLowerCase() === cleanSub)
+  );
 
   if (!site) {
     return res.status(404).send(`
@@ -382,6 +387,34 @@ app.use('/_sites/sites/:siteId', (req, res, next) => {
     if (siteExp.isExpired) {
       const { primaryDomain } = getDomainConfig();
       return res.status(410).send(renderExpiredPage(site.subdomain || site.siteId, primaryDomain, siteExp.expiresAt));
+    }
+  }
+  next();
+});
+
+// ==================== Maintenance Mode Middleware ====================
+app.use((req, res, next) => {
+  const config = loadJSON(CONFIG_FILE, {});
+  const isMaintenance = process.env.MAINTENANCE_MODE === 'true' || config.maintenanceMode === true;
+
+  if (isMaintenance) {
+    const p = req.path.toLowerCase();
+    // Allow admin pages, admin APIs, static assets (css/js/favicons), and health endpoint
+    const isAllowed = 
+      p.startsWith('/admin') ||
+      p.startsWith('/api/admin') ||
+      p.startsWith('/css/') ||
+      p.startsWith('/js/') ||
+      p.startsWith('/favicon') ||
+      p === '/maintenance.html' ||
+      p === '/api/health';
+
+    if (!isAllowed) {
+      const maintenancePath = path.join(__dirname, 'public', 'maintenance.html');
+      if (fs.existsSync(maintenancePath)) {
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return fs.createReadStream(maintenancePath).pipe(res);
+      }
     }
   }
   next();

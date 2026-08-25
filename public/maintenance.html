@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>系统维护中 · 秒转链接</title>
+    <meta name="description" content="系统正在进行升级维护，请稍后访问。">
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css?v=2.1">
+    <style>
+        .maintenance-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem 1rem;
+            position: relative;
+            z-index: 10;
+        }
+
+        .maintenance-card {
+            width: 100%;
+            max-width: 620px;
+            background: var(--mac-window-bg);
+            backdrop-filter: blur(28px);
+            -webkit-backdrop-filter: blur(28px);
+            border: 1px solid var(--mac-border);
+            border-radius: 24px;
+            box-shadow: var(--mac-shadow-window);
+            padding: 2.5rem;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            animation: cardAppear 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        @keyframes cardAppear {
+            from {
+                opacity: 0;
+                transform: translateY(20px) scale(0.97);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .maintenance-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 16px;
+            background: var(--accent-warning-bg);
+            border: 1px solid rgba(255, 159, 10, 0.3);
+            border-radius: 999px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--mac-orange);
+            margin-bottom: 1.5rem;
+        }
+
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--mac-orange);
+            border-radius: 50%;
+            box-shadow: 0 0 0 0 rgba(255, 159, 10, 0.7);
+            animation: pulseWarning 2s infinite;
+        }
+
+        @keyframes pulseWarning {
+            0% {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 rgba(255, 159, 10, 0.7);
+            }
+            70% {
+                transform: scale(1);
+                box-shadow: 0 0 0 10px rgba(255, 159, 10, 0);
+            }
+            100% {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 rgba(255, 159, 10, 0);
+            }
+        }
+
+        .maintenance-icon-wrap {
+            width: 76px;
+            height: 76px;
+            margin: 0 auto 1.5rem;
+            background: linear-gradient(135deg, rgba(255, 159, 10, 0.15), rgba(94, 92, 230, 0.15));
+            border: 1px solid var(--mac-border-highlight);
+            border-radius: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--mac-orange);
+            box-shadow: 0 10px 25px -5px rgba(255, 159, 10, 0.2);
+            animation: floatIcon 3s ease-in-out infinite alternate;
+        }
+
+        @keyframes floatIcon {
+            0% { transform: translateY(0px) rotate(0deg); }
+            100% { transform: translateY(-8px) rotate(3deg); }
+        }
+
+        .maintenance-title {
+            font-size: 1.75rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            margin-bottom: 0.75rem;
+            letter-spacing: -0.02em;
+        }
+
+        .maintenance-desc {
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: 2rem;
+        }
+
+        .status-timeline {
+            background: var(--mac-surface);
+            border: 1px solid var(--mac-border-subtle);
+            border-radius: 16px;
+            padding: 1.25rem;
+            margin-bottom: 2rem;
+            text-align: left;
+        }
+
+        .timeline-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 0;
+            font-size: 0.88rem;
+            border-bottom: 1px dashed var(--mac-border-subtle);
+        }
+
+        .timeline-item:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .timeline-item:first-child {
+            padding-top: 0;
+        }
+
+        .timeline-label {
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .timeline-status {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 6px;
+        }
+
+        .status-done {
+            background: var(--accent-success-bg);
+            color: var(--accent-success);
+        }
+
+        .status-in-progress {
+            background: var(--accent-warning-bg);
+            color: var(--mac-orange);
+        }
+
+        .status-pending {
+            background: rgba(142, 142, 147, 0.15);
+            color: var(--text-tertiary);
+        }
+
+        .action-group {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn-refresh {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 24px;
+            background: var(--primary-gradient);
+            color: #ffffff;
+            border: none;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: 0 4px 14px var(--accent-glow);
+        }
+
+        .btn-refresh:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px var(--accent-glow);
+            filter: brightness(1.08);
+        }
+
+        .btn-refresh:active {
+            transform: translateY(0);
+        }
+
+        .btn-contact {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            background: var(--mac-surface);
+            color: var(--text-primary);
+            border: 1px solid var(--mac-border);
+            border-radius: 12px;
+            font-weight: 500;
+            font-size: 0.95rem;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s ease;
+        }
+
+        .btn-contact:hover {
+            background: var(--mac-surface-hover);
+            border-color: var(--mac-border-highlight);
+        }
+
+        .maintenance-footer {
+            margin-top: 2rem;
+            padding-top: 1.25rem;
+            border-top: 1px solid var(--mac-border-subtle);
+            font-size: 0.8rem;
+            color: var(--text-tertiary);
+        }
+
+        .theme-toggle-floating {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 20;
+        }
+    </style>
+    <!-- Anti-flicker Theme Init Script -->
+    <script>
+        (function() {
+            try {
+                const savedTheme = localStorage.getItem('app_theme');
+                const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                const theme = savedTheme ? savedTheme : (prefersDark ? 'dark' : 'light');
+                document.documentElement.setAttribute('data-theme', theme);
+            } catch (e) {}
+        })();
+    </script>
+</head>
+<body>
+    <!-- Background Effects -->
+    <div class="bg-effects">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+        <canvas id="antigravityCanvas" class="antigravity-canvas"></canvas>
+    </div>
+
+    <!-- Theme Toggle Floating -->
+    <div class="theme-toggle-floating">
+        <button class="theme-toggle-btn" id="themeToggleBtn" title="切换深色/浅色模式" aria-label="切换深色/浅色模式">
+            <span class="theme-icon sun-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+            </span>
+            <span class="theme-icon moon-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            </span>
+        </button>
+    </div>
+
+    <!-- Main Content -->
+    <div class="maintenance-container">
+        <div class="maintenance-card">
+            
+            <div class="maintenance-badge">
+                <span class="pulse-dot"></span>
+                <span>系统例行维护与架构升级中</span>
+            </div>
+
+            <div class="maintenance-icon-wrap">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                </svg>
+            </div>
+
+            <h1 class="maintenance-title">服务升级维护公告</h1>
+            <p class="maintenance-desc">
+                为了向您提供更稳定、更快速的网页托管与访问体验，系统正在进行优化维护。<br>
+                维护期间前台发布与管理功能暂时受限，已发布的在线站点不受影响。
+            </p>
+
+            <!-- Status Timeline -->
+            <div class="status-timeline">
+                <div class="timeline-item">
+                    <span class="timeline-label">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+                        核心数据库备份与检验
+                    </span>
+                    <span class="timeline-status status-done">已完成</span>
+                </div>
+                <div class="timeline-item">
+                    <span class="timeline-label">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        服务节点热升级与扩容
+                    </span>
+                    <span class="timeline-status status-in-progress">进行中</span>
+                </div>
+                <div class="timeline-item">
+                    <span class="timeline-label">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+                        全网 CDN 缓存刷新与校验
+                    </span>
+                    <span class="timeline-status status-pending">等待中</span>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="action-group">
+                <button class="btn-refresh" id="refreshBtn" onclick="handleRefresh()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="refreshIcon"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                    <span>检查恢复状态 (<span id="autoRetrySec">30</span>s)</span>
+                </button>
+                <a href="javascript:void(0)" class="btn-contact" onclick="alert('客服联系方式：请联系管理员微信或发送邮件至 support@yourdomain.com');">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                    <span>联系客服</span>
+                </a>
+            </div>
+
+            <div class="maintenance-footer">
+                <span>&copy; <span id="currentYear"></span> 秒转链接 · 感谢您的理解与耐心等待</span>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script>
+        // Set current year
+        document.getElementById('currentYear').textContent = new Date().getFullYear();
+
+        // Theme Toggle Functionality
+        const themeToggleBtn = document.getElementById('themeToggleBtn');
+        function initTheme() {
+            themeToggleBtn.addEventListener('click', () => {
+                const newTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+                document.documentElement.setAttribute('data-theme', newTheme);
+                localStorage.setItem('app_theme', newTheme);
+            });
+        }
+        initTheme();
+
+        // Auto Refresh Countdown
+        let timeLeft = 30;
+        const autoRetryElem = document.getElementById('autoRetrySec');
+        const countdownTimer = setInterval(() => {
+            timeLeft--;
+            if (autoRetryElem) autoRetryElem.textContent = timeLeft;
+            if (timeLeft <= 0) {
+                clearInterval(countdownTimer);
+                location.reload();
+            }
+        }, 1000);
+
+        function handleRefresh() {
+            const icon = document.getElementById('refreshIcon');
+            if (icon) icon.style.transform = 'rotate(360deg)';
+            location.reload();
+        }
+
+        // Particle Canvas Background
+        (function() {
+            const canvas = document.getElementById('antigravityCanvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            let width, height;
+            let particles = [];
+
+            function resize() {
+                width = canvas.width = window.innerWidth;
+                height = canvas.height = window.innerHeight;
+            }
+
+            class Particle {
+                constructor() {
+                    this.reset();
+                }
+                reset() {
+                    this.x = Math.random() * width;
+                    this.y = Math.random() * height;
+                    this.vx = (Math.random() - 0.5) * 0.4;
+                    this.vy = (Math.random() - 0.5) * 0.4;
+                    this.radius = Math.random() * 1.5 + 0.5;
+                    this.alpha = Math.random() * 0.4 + 0.1;
+                }
+                update() {
+                    this.x += this.vx;
+                    this.y += this.vy;
+                    if (this.x < 0 || this.x > width || this.y < 0 || this.y > height) {
+                        this.reset();
+                    }
+                }
+                draw() {
+                    const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+                    ctx.fillStyle = isDark 
+                        ? 'rgba(255, 159, 10, ' + (this.alpha * 0.7) + ')'
+                        : 'rgba(94, 92, 230, ' + (this.alpha * 0.5) + ')';
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            function init() {
+                resize();
+                particles = [];
+                const count = Math.min(Math.floor((width * height) / 18000), 50);
+                for (let i = 0; i < count; i++) {
+                    particles.push(new Particle());
+                }
+            }
+
+            function animate() {
+                ctx.clearRect(0, 0, width, height);
+                particles.forEach(p => {
+                    p.update();
+                    p.draw();
+                });
+                requestAnimationFrame(animate);
+            }
+
+            window.addEventListener('resize', init);
+            init();
+            animate();
+        })();
+    </script>
+</body>
+</html>
