@@ -1187,7 +1187,7 @@ app.post('/api/admin/generate-keys', (req, res) => {
     return res.status(403).json({ success: false, message: '管理员密码错误' });
   }
 
-  const validDurations = ['3d', '7d', '1m', '3m', '6m', '1y'];
+  const validDurations = ['3d', '1m', '6m', '1y'];
   const validDuration = validDurations.includes(duration) ? duration : '1m';
   const num = Math.min(Math.max(parseInt(count) || 1, 1), 100);
   const parsedMaxUses = Math.max(parseInt(maxUses) || 0, 0); // 0 = 不限次数
@@ -1234,7 +1234,7 @@ app.post('/api/admin/import-keys', (req, res) => {
     return res.status(400).json({ success: false, message: '请输入要导入的卡密内容' });
   }
 
-  const validDurations = ['3d', '7d', '1m', '3m', '6m', '1y'];
+  const validDurations = ['3d', '1m', '6m', '1y'];
   const defaultDuration = validDurations.includes(duration) ? duration : '1m';
   const defaultStatus = ['unused', 'active', 'used'].includes(status) ? status : 'unused';
   const defaultMaxUses = Math.max(parseInt(maxUses) || 0, 0);
