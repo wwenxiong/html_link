@@ -188,6 +188,7 @@ document.addEventListener('DOMContentLoaded', () => {
             loadDomainConfig();
             loadClerkConfig();
             loadCdkeyBuyConfig();
+            loadAnnouncementConfig();
             loadHealthStatus();
         } catch (error) {
             adminPassword = '';
@@ -1256,6 +1257,424 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    // ==========================================================================
+    // ANNOUNCEMENTS CONFIGURATION & BUILDER
+    // ==========================================================================
+    const overviewAnnouncementStatus = document.getElementById('overviewAnnouncementStatus');
+    const announcementEnabledInput = document.getElementById('announcementEnabledInput');
+    const announcementAutoPlayInput = document.getElementById('announcementAutoPlayInput');
+    const announcementIntervalInput = document.getElementById('announcementIntervalInput');
+    const announcementLastUpdated = document.getElementById('announcementLastUpdated');
+    const announcementItemCount = document.getElementById('announcementItemCount');
+    const announcementItemsContainer = document.getElementById('announcementItemsContainer');
+    const addAnnouncementItemBtn = document.getElementById('addAnnouncementItemBtn');
+    const saveAnnouncementConfigBtn = document.getElementById('saveAnnouncementConfigBtn');
+    const previewAdminAnnouncementBtn = document.getElementById('previewAdminAnnouncementBtn');
+
+    let adminAnnouncementItems = [];
+    let adminAnnouncementConfig = null;
+
+    function updateAnnouncementStatusUI(enabled, itemsCount) {
+        if (!overviewAnnouncementStatus) return;
+        if (!enabled) {
+            overviewAnnouncementStatus.innerHTML = '<span style="color: var(--text-muted); font-weight: 500;">已关闭</span>';
+        } else {
+            overviewAnnouncementStatus.innerHTML = `<span style="color: var(--accent-success); font-weight: 600;">● 已启用 (${itemsCount}条公告)</span>`;
+        }
+    }
+
+    async function loadAnnouncementConfig() {
+        try {
+            const { resp, data } = await safeFetchJson(`/api/admin/announcements?password=${encodeURIComponent(adminPassword)}`);
+            if (data && data.success && data.data) {
+                adminAnnouncementConfig = data.data;
+                const cfg = data.data;
+
+                if (announcementEnabledInput) announcementEnabledInput.checked = Boolean(cfg.enabled);
+                if (announcementAutoPlayInput) announcementAutoPlayInput.checked = Boolean(cfg.autoPlay);
+                if (announcementIntervalInput) announcementIntervalInput.value = Math.round((parseInt(cfg.interval, 10) || 6000) / 1000);
+                if (announcementLastUpdated && cfg.updatedAt) {
+                    announcementLastUpdated.textContent = `最新发布：${formatDate(cfg.updatedAt)}`;
+                }
+
+                adminAnnouncementItems = Array.isArray(cfg.items) ? JSON.parse(JSON.stringify(cfg.items)) : [];
+                renderAdminAnnouncementItems();
+                updateAnnouncementStatusUI(cfg.enabled, adminAnnouncementItems.length);
+            }
+        } catch (e) {
+            console.warn('Failed to load announcement config:', e);
+            if (overviewAnnouncementStatus) {
+                overviewAnnouncementStatus.innerHTML = '<span style="color: var(--accent-error);">加载失败</span>';
+            }
+        }
+    }
+
+    function renderAdminAnnouncementItems() {
+        if (!announcementItemsContainer) return;
+        announcementItemsContainer.innerHTML = '';
+
+        if (announcementItemCount) {
+            announcementItemCount.textContent = adminAnnouncementItems.length;
+        }
+
+        if (adminAnnouncementItems.length === 0) {
+            announcementItemsContainer.innerHTML = `
+                <div style="text-align: center; padding: 24px 16px; background: var(--mac-control-bg); border: 1px dashed var(--mac-border); border-radius: 10px; color: var(--text-secondary); font-size: 12.5px;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 6px; opacity: 0.7;"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                    <div>暂无公告内容</div>
+                    <div style="font-size: 11.5px; color: var(--text-tertiary); margin-top: 2px;">点击上方「添加一条公告」创建您的第一条公示通知</div>
+                </div>
+            `;
+            return;
+        }
+
+        adminAnnouncementItems.forEach((item, index) => {
+            const card = document.createElement('div');
+            card.className = 'admin-announcement-card';
+
+            const tagColor = ['blue', 'green', 'orange', 'purple', 'red'].includes(item.tagColor) ? item.tagColor : 'blue';
+
+            card.innerHTML = `
+                <div class="admin-announcement-card-header">
+                    <div class="admin-announcement-card-title">
+                        <span class="announcement-tag tag-${escapeHtml(tagColor)}">#${index + 1}</span>
+                        <span>${escapeHtml(item.title || '（未设置标题）')}</span>
+                    </div>
+                    <div class="admin-announcement-card-actions">
+                        <button type="button" class="btn btn-sm btn-outline move-up-btn" data-index="${index}" title="上移" ${index === 0 ? 'disabled' : ''} style="padding: 3px 8px; font-size: 11px;">
+                            ↑
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline move-down-btn" data-index="${index}" title="下移" ${index === adminAnnouncementItems.length - 1 ? 'disabled' : ''} style="padding: 3px 8px; font-size: 11px;">
+                            ↓
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline delete-item-btn" data-index="${index}" title="删除此公告" style="padding: 3px 8px; font-size: 11px; color: var(--accent-error);">
+                            🗑️
+                        </button>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 140px 1fr; gap: 10px; margin-bottom: 10px;">
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 11.5px; color: var(--text-secondary); margin-bottom: 2px; display: block;">标签文本</label>
+                        <input type="text" class="admin-input item-tag-input" data-index="${index}" value="${escapeHtml(item.tag || '')}" placeholder="如：最新公告" style="font-size: 12px; padding: 5px 8px;">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 11.5px; color: var(--text-secondary); margin-bottom: 2px; display: block;">标签色彩风格</label>
+                        <select class="admin-input item-color-select" data-index="${index}" style="font-size: 12px; padding: 5px 8px;">
+                            <option value="blue" ${tagColor === 'blue' ? 'selected' : ''}>🔵 蓝色 (默认·通知)</option>
+                            <option value="green" ${tagColor === 'green' ? 'selected' : ''}>🟢 绿色 (上线·成功)</option>
+                            <option value="orange" ${tagColor === 'orange' ? 'selected' : ''}>🟠 橙色 (提醒·维护)</option>
+                            <option value="purple" ${tagColor === 'purple' ? 'selected' : ''}>🟣 紫色 (活动·重磅)</option>
+                            <option value="red" ${tagColor === 'red' ? 'selected' : ''}>🔴 红色 (紧急·重要)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 10px;">
+                    <label style="font-size: 11.5px; color: var(--text-secondary); margin-bottom: 2px; display: block;">公告标题</label>
+                    <input type="text" class="admin-input item-title-input" data-index="${index}" value="${escapeHtml(item.title || '')}" placeholder="例如：🎉 秒转链接平台全新升级" style="font-size: 12px; padding: 6px 10px; font-weight: 600;">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 10px;">
+                    <label style="font-size: 11.5px; color: var(--text-secondary); margin-bottom: 2px; display: block;">公告正文内容 (支持多行文本)</label>
+                    <textarea class="admin-input item-content-input" data-index="${index}" rows="3" placeholder="输入详细公示说明..." style="font-size: 12px; line-height: 1.5; padding: 6px 10px; resize: vertical;">${escapeHtml(item.content || '')}</textarea>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 11.5px; color: var(--text-secondary); margin-bottom: 2px; display: block;">跳转链接 (可选)</label>
+                        <input type="text" class="admin-input item-link-input" data-index="${index}" value="${escapeHtml(item.link || '')}" placeholder="https://..." style="font-size: 12px; padding: 5px 8px;">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 11.5px; color: var(--text-secondary); margin-bottom: 2px; display: block;">按钮文案 (可选)</label>
+                        <input type="text" class="admin-input item-linktext-input" data-index="${index}" value="${escapeHtml(item.linkText || '')}" placeholder="默认：查看详情" style="font-size: 12px; padding: 5px 8px;">
+                    </div>
+                </div>
+            `;
+
+            // Bind input change listeners to sync state
+            const tagInput = card.querySelector('.item-tag-input');
+            const colorSelect = card.querySelector('.item-color-select');
+            const titleInput = card.querySelector('.item-title-input');
+            const contentInput = card.querySelector('.item-content-input');
+            const linkInput = card.querySelector('.item-link-input');
+            const linkTextInput = card.querySelector('.item-linktext-input');
+
+            if (tagInput) tagInput.addEventListener('input', (e) => { adminAnnouncementItems[index].tag = e.target.value; });
+            if (colorSelect) colorSelect.addEventListener('change', (e) => {
+                adminAnnouncementItems[index].tagColor = e.target.value;
+                const tagEl = card.querySelector('.announcement-tag');
+                if (tagEl) {
+                    tagEl.className = `announcement-tag tag-${e.target.value}`;
+                }
+            });
+            if (titleInput) titleInput.addEventListener('input', (e) => {
+                adminAnnouncementItems[index].title = e.target.value;
+                const titleEl = card.querySelector('.admin-announcement-card-title span:last-child');
+                if (titleEl) titleEl.textContent = e.target.value || '（未设置标题）';
+            });
+            if (contentInput) contentInput.addEventListener('input', (e) => { adminAnnouncementItems[index].content = e.target.value; });
+            if (linkInput) linkInput.addEventListener('input', (e) => { adminAnnouncementItems[index].link = e.target.value; });
+            if (linkTextInput) linkTextInput.addEventListener('input', (e) => { adminAnnouncementItems[index].linkText = e.target.value; });
+
+            // Actions
+            const moveUpBtn = card.querySelector('.move-up-btn');
+            const moveDownBtn = card.querySelector('.move-down-btn');
+            const deleteBtn = card.querySelector('.delete-item-btn');
+
+            if (moveUpBtn) moveUpBtn.addEventListener('click', () => {
+                if (index > 0) {
+                    const temp = adminAnnouncementItems[index];
+                    adminAnnouncementItems[index] = adminAnnouncementItems[index - 1];
+                    adminAnnouncementItems[index - 1] = temp;
+                    renderAdminAnnouncementItems();
+                }
+            });
+
+            if (moveDownBtn) moveDownBtn.addEventListener('click', () => {
+                if (index < adminAnnouncementItems.length - 1) {
+                    const temp = adminAnnouncementItems[index];
+                    adminAnnouncementItems[index] = adminAnnouncementItems[index + 1];
+                    adminAnnouncementItems[index + 1] = temp;
+                    renderAdminAnnouncementItems();
+                }
+            });
+
+            if (deleteBtn) deleteBtn.addEventListener('click', () => {
+                if (confirm(`确定要删除第 ${index + 1} 条公告吗？`)) {
+                    adminAnnouncementItems.splice(index, 1);
+                    renderAdminAnnouncementItems();
+                }
+            });
+
+            announcementItemsContainer.appendChild(card);
+        });
+    }
+
+    if (addAnnouncementItemBtn) {
+        addAnnouncementItemBtn.addEventListener('click', () => {
+            adminAnnouncementItems.push({
+                id: `notice_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                tag: '最新公告',
+                tagColor: 'blue',
+                title: '',
+                content: '',
+                link: '',
+                linkText: ''
+            });
+            renderAdminAnnouncementItems();
+
+            // Auto-scroll to the bottom of the container
+            setTimeout(() => {
+                const cards = announcementItemsContainer.querySelectorAll('.admin-announcement-card');
+                if (cards.length > 0) {
+                    const lastCard = cards[cards.length - 1];
+                    const titleField = lastCard.querySelector('.item-title-input');
+                    if (titleField) titleField.focus();
+                }
+            }, 50);
+        });
+    }
+
+    if (saveAnnouncementConfigBtn) {
+        saveAnnouncementConfigBtn.addEventListener('click', async () => {
+            const enabled = announcementEnabledInput ? announcementEnabledInput.checked : true;
+            const autoPlay = announcementAutoPlayInput ? announcementAutoPlayInput.checked : true;
+            const intervalSec = announcementIntervalInput ? Math.max(parseInt(announcementIntervalInput.value, 10) || 6, 2) : 6;
+            const interval = intervalSec * 1000;
+
+            saveAnnouncementConfigBtn.disabled = true;
+            saveAnnouncementConfigBtn.textContent = '保存中...';
+
+            try {
+                const { resp, data } = await safeFetchJson('/api/admin/announcements', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        enabled,
+                        autoPlay,
+                        interval,
+                        items: adminAnnouncementItems,
+                        password: adminPassword
+                    })
+                });
+
+                if (!resp.ok || !data.success) {
+                    throw new Error(data.message || '保存失败');
+                }
+
+                adminAnnouncementConfig = data.data;
+                if (announcementLastUpdated && data.data.updatedAt) {
+                    announcementLastUpdated.textContent = `最新发布：${formatDate(data.data.updatedAt)}`;
+                }
+
+                updateAnnouncementStatusUI(enabled, adminAnnouncementItems.length);
+                showToast(data.message || '公告配置已成功发布！', 'success');
+            } catch (error) {
+                showToast(error.message || '保存失败', 'error');
+            } finally {
+                saveAnnouncementConfigBtn.disabled = false;
+                saveAnnouncementConfigBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 4px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>保存并发布公告';
+            }
+        });
+    }
+
+    // Admin Preview Modal Handling
+    let previewSlideIndex = 0;
+    let previewAutoPlayTimer = null;
+    const previewModal = document.getElementById('announcementModal');
+    const closePreviewModalBtn = document.getElementById('closeAnnouncementModalBtn');
+    const confirmPreviewBtn = document.getElementById('confirmAnnouncementBtn');
+    const previewTrack = document.getElementById('announcementTrack');
+    const previewDots = document.getElementById('announcementDots');
+    const previewPrevBtn = document.getElementById('announcementPrevBtn');
+    const previewNextBtn = document.getElementById('announcementNextBtn');
+    const previewControls = document.getElementById('announcementControls');
+    const previewCounterPill = document.getElementById('announcementCounterPill');
+    const previewViewport = document.getElementById('announcementViewport');
+
+    function renderPreviewSlides(items) {
+        if (!previewTrack || !previewDots) return;
+        previewTrack.innerHTML = '';
+        previewDots.innerHTML = '';
+
+        items.forEach((item, index) => {
+            const slide = document.createElement('div');
+            slide.className = 'announcement-slide';
+
+            const tagColor = ['blue', 'green', 'orange', 'purple', 'red'].includes(item.tagColor) ? item.tagColor : 'blue';
+            const tagHtml = item.tag ? `<span class="announcement-tag tag-${escapeHtml(tagColor)}">${escapeHtml(item.tag)}</span>` : '';
+            const titleHtml = `<h3 class="announcement-title">${escapeHtml(item.title || '（未设置标题）')}</h3>`;
+            const contentHtml = `<div class="announcement-content">${escapeHtml(item.content || '（暂无正文内容）')}</div>`;
+            
+            let linkHtml = '';
+            if (item.link && item.link.trim()) {
+                const linkText = item.linkText ? escapeHtml(item.linkText.trim()) : '查看详情';
+                linkHtml = `<a href="${escapeHtml(item.link)}" target="_blank" rel="noopener noreferrer" class="announcement-link-btn">
+                    <span>${linkText}</span>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                </a>`;
+            }
+
+            slide.innerHTML = `
+                ${tagHtml}
+                ${titleHtml}
+                ${contentHtml}
+                ${linkHtml}
+            `;
+            previewTrack.appendChild(slide);
+
+            const dot = document.createElement('div');
+            dot.className = `announcement-dot ${index === 0 ? 'active' : ''}`;
+            dot.addEventListener('click', () => {
+                goToPreviewSlide(index);
+                resetPreviewAutoPlay();
+            });
+            previewDots.appendChild(dot);
+        });
+
+        if (items.length <= 1) {
+            if (previewControls) previewControls.style.display = 'none';
+            if (previewCounterPill) previewCounterPill.style.display = 'none';
+        } else {
+            if (previewControls) previewControls.style.display = 'flex';
+            if (previewCounterPill) previewCounterPill.style.display = 'inline-block';
+        }
+    }
+
+    function goToPreviewSlide(index) {
+        if (!adminAnnouncementItems || adminAnnouncementItems.length === 0) return;
+        if (index < 0) index = adminAnnouncementItems.length - 1;
+        if (index >= adminAnnouncementItems.length) index = 0;
+
+        previewSlideIndex = index;
+        if (previewTrack) {
+            previewTrack.style.transform = `translateX(-${index * 100}%)`;
+        }
+        if (previewCounterPill) {
+            previewCounterPill.textContent = `${index + 1} / ${adminAnnouncementItems.length}`;
+        }
+        if (previewDots) {
+            const dots = previewDots.querySelectorAll('.announcement-dot');
+            dots.forEach((d, idx) => {
+                if (idx === index) d.classList.add('active');
+                else d.classList.remove('active');
+            });
+        }
+    }
+
+    function startPreviewAutoPlay() {
+        stopPreviewAutoPlay();
+        if (adminAnnouncementItems.length <= 1) return;
+        const autoPlay = announcementAutoPlayInput ? announcementAutoPlayInput.checked : true;
+        if (!autoPlay) return;
+
+        const intervalSec = announcementIntervalInput ? Math.max(parseInt(announcementIntervalInput.value, 10) || 6, 2) : 6;
+        previewAutoPlayTimer = setInterval(() => {
+            goToPreviewSlide(previewSlideIndex + 1);
+        }, intervalSec * 1000);
+    }
+
+    function stopPreviewAutoPlay() {
+        if (previewAutoPlayTimer) {
+            clearInterval(previewAutoPlayTimer);
+            previewAutoPlayTimer = null;
+        }
+    }
+
+    function resetPreviewAutoPlay() {
+        stopPreviewAutoPlay();
+        startPreviewAutoPlay();
+    }
+
+    function openAdminPreviewModal() {
+        if (!adminAnnouncementItems || adminAnnouncementItems.length === 0) {
+            showToast('请先添加至少一条公告后再预览', 'warning');
+            return;
+        }
+        renderPreviewSlides(adminAnnouncementItems);
+        goToPreviewSlide(0);
+        if (previewModal) previewModal.classList.remove('hidden');
+        startPreviewAutoPlay();
+    }
+
+    function closeAdminPreviewModal() {
+        if (previewModal) previewModal.classList.add('hidden');
+        stopPreviewAutoPlay();
+    }
+
+    if (previewAdminAnnouncementBtn) {
+        previewAdminAnnouncementBtn.addEventListener('click', openAdminPreviewModal);
+    }
+    if (closePreviewModalBtn) {
+        closePreviewModalBtn.addEventListener('click', closeAdminPreviewModal);
+    }
+    if (confirmPreviewBtn) {
+        confirmPreviewBtn.addEventListener('click', closeAdminPreviewModal);
+    }
+    if (previewModal) {
+        previewModal.addEventListener('click', (e) => {
+            if (e.target === previewModal) closeAdminPreviewModal();
+        });
+    }
+    if (previewPrevBtn) {
+        previewPrevBtn.addEventListener('click', () => {
+            goToPreviewSlide(previewSlideIndex - 1);
+            resetPreviewAutoPlay();
+        });
+    }
+    if (previewNextBtn) {
+        previewNextBtn.addEventListener('click', () => {
+            goToPreviewSlide(previewSlideIndex + 1);
+            resetPreviewAutoPlay();
+        });
+    }
+    if (previewViewport) {
+        previewViewport.addEventListener('mouseenter', stopPreviewAutoPlay);
+        previewViewport.addEventListener('mouseleave', startPreviewAutoPlay);
+    }
+
 
     // ---- Health Status ----
     async function loadHealthStatus() {

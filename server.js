@@ -113,6 +113,37 @@ function getCdkeyBuyConfig() {
   return { cdkeyBuyUrl, cdkeyBuyText };
 }
 
+// Announcements Configuration Helper
+function getAnnouncementsConfig() {
+  const raw = db.config.get('announcements_config', null);
+  if (!raw || typeof raw !== 'object') {
+    return {
+      enabled: true,
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      autoPlay: true,
+      interval: 6000,
+      items: [
+        {
+          id: 'welcome_notice',
+          tag: '平台动态',
+          tagColor: 'blue',
+          title: '🎉 欢迎使用 HTML 网页秒转在线链接',
+          content: '本平台支持将 HTML 文件、ZIP 压缩包或网页源码一键秒转为公网在线访问链接。\n支持二级域名个性化分配、全球 CDN 加速与卡密时长管理！',
+          link: '',
+          linkText: ''
+        }
+      ]
+    };
+  }
+  return {
+    enabled: raw.enabled !== undefined ? Boolean(raw.enabled) : true,
+    updatedAt: raw.updatedAt || new Date().toISOString(),
+    autoPlay: raw.autoPlay !== undefined ? Boolean(raw.autoPlay) : true,
+    interval: Math.max(parseInt(raw.interval, 10) || 6000, 2000),
+    items: Array.isArray(raw.items) ? raw.items : []
+  };
+}
+
 
 async function safeGetAuth(req) {
   try {
@@ -632,6 +663,7 @@ app.get('/api/public-config', (req, res) => {
   const { primaryDomain, useHttps } = getDomainConfig();
   const { publishableKey } = getClerkConfig();
   const { cdkeyBuyUrl, cdkeyBuyText } = getCdkeyBuyConfig();
+  const announcements = getAnnouncementsConfig();
   return res.json({
     success: true,
     data: {
@@ -640,8 +672,17 @@ app.get('/api/public-config', (req, res) => {
       protocol: useHttps ? 'https://' : 'http://',
       clerkPublishableKey: isClerkConfigured() ? publishableKey : '',
       cdkeyBuyUrl,
-      cdkeyBuyText
+      cdkeyBuyText,
+      announcements
     }
+  });
+});
+
+// --- Public Announcements Endpoint ---
+app.get('/api/announcements', (req, res) => {
+  return res.json({
+    success: true,
+    data: getAnnouncementsConfig()
   });
 });
 
@@ -1699,6 +1740,59 @@ app.post('/api/admin/cdkey-buy-config', (req, res) => {
     success: true,
     message: '卡密获取渠道配置已更新！',
     data: getCdkeyBuyConfig()
+  });
+});
+
+// --- Admin: Get Announcements Config ---
+app.get('/api/admin/announcements', (req, res) => {
+  const { password } = req.query;
+
+  if (password !== ADMIN_PASSWORD) {
+    return res.status(403).json({ success: false, message: '管理员密码错误' });
+  }
+
+  return res.json({ success: true, data: getAnnouncementsConfig() });
+});
+
+// --- Admin: Save Announcements Config ---
+app.post('/api/admin/announcements', (req, res) => {
+  const { enabled, autoPlay, interval, items, password } = req.body || {};
+
+  if (password !== ADMIN_PASSWORD) {
+    return res.status(403).json({ success: false, message: '管理员密码错误' });
+  }
+
+  const isEnabled = enabled !== undefined ? Boolean(enabled) : true;
+  const isAutoPlay = autoPlay !== undefined ? Boolean(autoPlay) : true;
+  const parsedInterval = Math.max(parseInt(interval, 10) || 6000, 2000);
+
+  let cleanItems = [];
+  if (Array.isArray(items)) {
+    cleanItems = items.map((item, idx) => ({
+      id: (item.id && String(item.id).trim()) || `notice_${Date.now()}_${idx}`,
+      tag: (item.tag && String(item.tag).trim()) || '公告',
+      tagColor: ['blue', 'green', 'orange', 'purple', 'red'].includes(item.tagColor) ? item.tagColor : 'blue',
+      title: (item.title && String(item.title).trim()) || '通知',
+      content: (item.content && String(item.content).trim()) || '',
+      link: (item.link && String(item.link).trim()) || '',
+      linkText: (item.linkText && String(item.linkText).trim()) || ''
+    })).filter(item => item.title || item.content);
+  }
+
+  const newConfig = {
+    enabled: isEnabled,
+    updatedAt: new Date().toISOString(), // new update timestamp to trigger client popup
+    autoPlay: isAutoPlay,
+    interval: parsedInterval,
+    items: cleanItems
+  };
+
+  db.config.set('announcements_config', newConfig);
+
+  return res.json({
+    success: true,
+    message: `公告配置已保存并发布！共 ${cleanItems.length} 条公告。`,
+    data: newConfig
   });
 });
 

@@ -157,6 +157,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (publicDomainConfig.clerkPublishableKey) {
                     initClerk(publicDomainConfig.clerkPublishableKey);
                 }
+
+                // Initialize Announcements Popup System
+                if (publicDomainConfig.announcements) {
+                    initAnnouncementSystem(publicDomainConfig.announcements);
+                }
             }
         } catch (e) {
             console.error('Failed to load public config:', e);
@@ -1571,5 +1576,226 @@ document.addEventListener('DOMContentLoaded', () => {
         animationFrameId = requestAnimationFrame(render);
     }
 
+    // ==========================================================================
+    // ANNOUNCEMENT POPUP & CAROUSEL SYSTEM
+    // ==========================================================================
+    let currentAnnouncementConfig = null;
+    let announcementCurrentSlide = 0;
+    let announcementAutoPlayTimer = null;
+    const ANNOUNCEMENT_STORAGE_KEY = 'html_link_announcement_last_read';
+
+    const announcementModal = document.getElementById('announcementModal');
+    const closeAnnouncementModalBtn = document.getElementById('closeAnnouncementModalBtn');
+    const confirmAnnouncementBtn = document.getElementById('confirmAnnouncementBtn');
+    const navAnnouncementBtn = document.getElementById('navAnnouncementBtn');
+    const announcementUnreadDot = document.getElementById('announcementUnreadDot');
+    const announcementViewport = document.getElementById('announcementViewport');
+    const announcementTrack = document.getElementById('announcementTrack');
+    const announcementDots = document.getElementById('announcementDots');
+    const announcementPrevBtn = document.getElementById('announcementPrevBtn');
+    const announcementNextBtn = document.getElementById('announcementNextBtn');
+    const announcementControls = document.getElementById('announcementControls');
+    const announcementCounterPill = document.getElementById('announcementCounterPill');
+
+    function initAnnouncementSystem(announcementData) {
+        if (!announcementData) return;
+        currentAnnouncementConfig = announcementData;
+
+        const enabled = Boolean(announcementData.enabled);
+        const items = Array.isArray(announcementData.items) ? announcementData.items : [];
+
+        if (!enabled || items.length === 0) {
+            if (navAnnouncementBtn) navAnnouncementBtn.classList.add('hidden');
+            return;
+        }
+
+        // Show header announcement button
+        if (navAnnouncementBtn) navAnnouncementBtn.classList.remove('hidden');
+
+        // Check if user has read the latest version
+        const lastReadTime = localStorage.getItem(ANNOUNCEMENT_STORAGE_KEY);
+        const isNewAnnouncement = !lastReadTime || (announcementData.updatedAt && new Date(announcementData.updatedAt).getTime() > new Date(lastReadTime).getTime());
+
+        if (isNewAnnouncement && announcementUnreadDot) {
+            announcementUnreadDot.classList.remove('hidden');
+        }
+
+        // Auto-popup if it's new
+        if (isNewAnnouncement) {
+            setTimeout(() => {
+                openAnnouncementModal();
+            }, 600);
+        }
+    }
+
+    function renderAnnouncementSlides(items) {
+        if (!announcementTrack || !announcementDots) return;
+        announcementTrack.innerHTML = '';
+        announcementDots.innerHTML = '';
+
+        items.forEach((item, index) => {
+            const slide = document.createElement('div');
+            slide.className = 'announcement-slide';
+
+            const tagColor = ['blue', 'green', 'orange', 'purple', 'red'].includes(item.tagColor) ? item.tagColor : 'blue';
+            const tagHtml = item.tag ? `<span class="announcement-tag tag-${escapeHtml(tagColor)}">${escapeHtml(item.tag)}</span>` : '';
+            const titleHtml = item.title ? `<h3 class="announcement-title">${escapeHtml(item.title)}</h3>` : '';
+            const contentHtml = item.content ? `<div class="announcement-content">${escapeHtml(item.content)}</div>` : '';
+            
+            let linkHtml = '';
+            if (item.link && item.link.trim()) {
+                const linkText = item.linkText ? escapeHtml(item.linkText.trim()) : '查看详情';
+                const safeUrl = escapeHtml(normalizeBuyUrl(item.link));
+                linkHtml = `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="announcement-link-btn">
+                    <span>${linkText}</span>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                </a>`;
+            }
+
+            slide.innerHTML = `
+                ${tagHtml}
+                ${titleHtml}
+                ${contentHtml}
+                ${linkHtml}
+            `;
+            announcementTrack.appendChild(slide);
+
+            const dot = document.createElement('div');
+            dot.className = `announcement-dot ${index === 0 ? 'active' : ''}`;
+            dot.addEventListener('click', () => {
+                goToAnnouncementSlide(index);
+                resetAnnouncementAutoPlay();
+            });
+            announcementDots.appendChild(dot);
+        });
+
+        if (items.length <= 1) {
+            if (announcementControls) announcementControls.style.display = 'none';
+            if (announcementCounterPill) announcementCounterPill.style.display = 'none';
+        } else {
+            if (announcementControls) announcementControls.style.display = 'flex';
+            if (announcementCounterPill) announcementCounterPill.style.display = 'inline-block';
+        }
+    }
+
+    function goToAnnouncementSlide(index) {
+        if (!currentAnnouncementConfig || !currentAnnouncementConfig.items) return;
+        const items = currentAnnouncementConfig.items;
+        if (items.length === 0) return;
+
+        if (index < 0) index = items.length - 1;
+        if (index >= items.length) index = 0;
+
+        announcementCurrentSlide = index;
+
+        if (announcementTrack) {
+            announcementTrack.style.transform = `translateX(-${index * 100}%)`;
+        }
+
+        if (announcementCounterPill) {
+            announcementCounterPill.textContent = `${index + 1} / ${items.length}`;
+        }
+
+        if (announcementDots) {
+            const dots = announcementDots.querySelectorAll('.announcement-dot');
+            dots.forEach((d, idx) => {
+                if (idx === index) d.classList.add('active');
+                else d.classList.remove('active');
+            });
+        }
+    }
+
+    function startAnnouncementAutoPlay() {
+        stopAnnouncementAutoPlay();
+        if (!currentAnnouncementConfig || !currentAnnouncementConfig.autoPlay) return;
+        const items = currentAnnouncementConfig.items || [];
+        if (items.length <= 1) return;
+
+        const interval = Math.max(parseInt(currentAnnouncementConfig.interval, 10) || 6000, 2000);
+        announcementAutoPlayTimer = setInterval(() => {
+            goToAnnouncementSlide(announcementCurrentSlide + 1);
+        }, interval);
+    }
+
+    function stopAnnouncementAutoPlay() {
+        if (announcementAutoPlayTimer) {
+            clearInterval(announcementAutoPlayTimer);
+            announcementAutoPlayTimer = null;
+        }
+    }
+
+    function resetAnnouncementAutoPlay() {
+        stopAnnouncementAutoPlay();
+        startAnnouncementAutoPlay();
+    }
+
+    function openAnnouncementModal() {
+        if (!currentAnnouncementConfig || !currentAnnouncementConfig.items || currentAnnouncementConfig.items.length === 0) return;
+        renderAnnouncementSlides(currentAnnouncementConfig.items);
+        goToAnnouncementSlide(0);
+        announcementModal.classList.remove('hidden');
+        startAnnouncementAutoPlay();
+
+        // Mark unread dot hidden
+        if (announcementUnreadDot) announcementUnreadDot.classList.add('hidden');
+    }
+
+    function closeAnnouncementModal(markAsRead = true) {
+        if (!announcementModal) return;
+        announcementModal.classList.add('hidden');
+        stopAnnouncementAutoPlay();
+
+        if (markAsRead && currentAnnouncementConfig && currentAnnouncementConfig.updatedAt) {
+            localStorage.setItem(ANNOUNCEMENT_STORAGE_KEY, currentAnnouncementConfig.updatedAt);
+        }
+    }
+
+    // Event Listeners for announcement modal
+    if (closeAnnouncementModalBtn) {
+        closeAnnouncementModalBtn.addEventListener('click', () => closeAnnouncementModal(true));
+    }
+    if (confirmAnnouncementBtn) {
+        confirmAnnouncementBtn.addEventListener('click', () => closeAnnouncementModal(true));
+    }
+    if (announcementModal) {
+        announcementModal.addEventListener('click', (e) => {
+            if (e.target === announcementModal) closeAnnouncementModal(true);
+        });
+    }
+    if (navAnnouncementBtn) {
+        navAnnouncementBtn.addEventListener('click', () => openAnnouncementModal());
+    }
+    if (announcementPrevBtn) {
+        announcementPrevBtn.addEventListener('click', () => {
+            goToAnnouncementSlide(announcementCurrentSlide - 1);
+            resetAnnouncementAutoPlay();
+        });
+    }
+    if (announcementNextBtn) {
+        announcementNextBtn.addEventListener('click', () => {
+            goToAnnouncementSlide(announcementCurrentSlide + 1);
+            resetAnnouncementAutoPlay();
+        });
+    }
+    if (announcementViewport) {
+        announcementViewport.addEventListener('mouseenter', stopAnnouncementAutoPlay);
+        announcementViewport.addEventListener('mouseleave', startAnnouncementAutoPlay);
+    }
+
+    // Keyboard navigation for announcement modal
+    document.addEventListener('keydown', (e) => {
+        if (!announcementModal || announcementModal.classList.contains('hidden')) return;
+        if (e.key === 'Escape') {
+            closeAnnouncementModal(true);
+        } else if (e.key === 'ArrowLeft') {
+            goToAnnouncementSlide(announcementCurrentSlide - 1);
+            resetAnnouncementAutoPlay();
+        } else if (e.key === 'ArrowRight') {
+            goToAnnouncementSlide(announcementCurrentSlide + 1);
+            resetAnnouncementAutoPlay();
+        }
+    });
+
     initAntigravityBackground();
 });
+
