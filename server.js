@@ -1905,6 +1905,8 @@ app.post('/api/admin/clerk-config', (req, res) => {
 app.get('/api/health', (req, res) => {
   res.json({
     success: true,
+    version: '2.3.0',
+    features: ['sqlite', 'batch_import', 'max_uses', 'cached_clerk'],
     storage: isR2Configured() ? 'Cloudflare R2' : '本地存储（演示模式）',
     timestamp: new Date().toISOString()
   });
