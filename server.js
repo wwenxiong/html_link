@@ -237,12 +237,45 @@ app.use(cors());
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
-// Safe Clerk Middleware: only activate when publishableKey & secretKey are properly configured
+// Cached Clerk Middleware instance to avoid creating new SDK instances on every HTTP request (major CPU & GC killer)
+let cachedClerkMiddleware = null;
+let lastClerkPubKey = null;
+let lastClerkSecKey = null;
+
+function getCachedClerkMiddleware() {
+  if (!isClerkConfigured()) return null;
+  const { publishableKey, secretKey } = getClerkConfig();
+  if (!publishableKey || !secretKey) return null;
+  if (!cachedClerkMiddleware || lastClerkPubKey !== publishableKey || lastClerkSecKey !== secretKey) {
+    cachedClerkMiddleware = clerkMiddleware({ publishableKey, secretKey });
+    lastClerkPubKey = publishableKey;
+    lastClerkSecKey = secretKey;
+  }
+  return cachedClerkMiddleware;
+}
+
+// Safe Clerk Middleware: only run on dynamic routes, skip static assets for high throughput
 app.use((req, res, next) => {
-  if (isClerkConfigured()) {
-    const { publishableKey, secretKey } = getClerkConfig();
+  const p = req.path;
+  if (
+    p.startsWith('/css/') ||
+    p.startsWith('/js/') ||
+    p.startsWith('/_sites/') ||
+    p.startsWith('/favicon') ||
+    p.endsWith('.css') ||
+    p.endsWith('.js') ||
+    p.endsWith('.svg') ||
+    p.endsWith('.png') ||
+    p.endsWith('.ico') ||
+    p.endsWith('.jpg') ||
+    p.endsWith('.woff2')
+  ) {
+    return next();
+  }
+
+  const mw = getCachedClerkMiddleware();
+  if (mw) {
     try {
-      const mw = clerkMiddleware({ publishableKey, secretKey });
       return Promise.resolve(mw(req, res, next)).catch(err => {
         console.warn('Clerk auth middleware async warning:', err.message);
         next();
@@ -263,13 +296,19 @@ const upload = multer({
 
 // ==================== Subdomain Dynamic Router ====================
 app.use((req, res, next) => {
-  const hostHeader = (req.headers.host || '').split(':')[0].toLowerCase();
-  const { primaryDomain } = getDomainConfig();
-
-  // Always pass through for /api routes
-  if (req.path.startsWith('/api')) {
+  // Fast pass for /api routes and static assets
+  if (
+    req.path.startsWith('/api') ||
+    req.path.startsWith('/css/') ||
+    req.path.startsWith('/js/') ||
+    req.path.startsWith('/_sites/') ||
+    req.path === '/favicon.ico'
+  ) {
     return next();
   }
+
+  const hostHeader = (req.headers.host || '').split(':')[0].toLowerCase();
+  const { primaryDomain } = getDomainConfig();
 
   // If no primary domain configured or if host is main domain / reserved API, pass through
   if (!primaryDomain || hostHeader === primaryDomain || hostHeader === `www.${primaryDomain}` || hostHeader.startsWith('admin.') || hostHeader.startsWith('api.')) {
@@ -1664,8 +1703,17 @@ app.post('/api/admin/cdkey-buy-config', (req, res) => {
 });
 
 
-// In-memory Clerk user profile cache to avoid slow cross-border HTTP roundtrips
+// In-memory Clerk user profile cache with max size limit to prevent memory leak
 const clerkUserMemoryCache = new Map();
+const MAX_CLERK_USER_CACHE_SIZE = 1000;
+
+function setClerkUserCache(userId, data) {
+  if (clerkUserMemoryCache.size >= MAX_CLERK_USER_CACHE_SIZE) {
+    const firstKey = clerkUserMemoryCache.keys().next().value;
+    if (firstKey) clerkUserMemoryCache.delete(firstKey);
+  }
+  clerkUserMemoryCache.set(userId, data);
+}
 
 // --- User Profile & Sites API ---
 app.get('/api/user/me', async (req, res) => {
@@ -1701,7 +1749,7 @@ app.get('/api/user/me', async (req, res) => {
             username: user.username || ''
           };
           userEmail = userDetails.email || userEmail;
-          clerkUserMemoryCache.set(auth.userId, {
+          setClerkUserCache(auth.userId, {
             details: userDetails,
             email: userEmail,
             timestamp: Date.now()
