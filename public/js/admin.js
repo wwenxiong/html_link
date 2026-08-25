@@ -207,17 +207,37 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast('已退出登录', 'info');
     });
 
+    // Safe JSON Fetch Helper with robust error handling
+    async function safeFetchJson(url, options = {}) {
+        const response = await fetch(url, options);
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+            const data = await response.json();
+            if (!response.ok || data.success === false) {
+                throw new Error(data.message || `请求失败 (${response.status})`);
+            }
+            return data;
+        }
+        const text = await response.text();
+        if (response.status === 401 || response.status === 403) {
+            throw new Error('管理员密码错误，请重新输入');
+        }
+        if (response.status === 502 || response.status === 504) {
+            throw new Error('Node 服务未连接 (502)，请检查宝塔后台 Node.js 是否已启动');
+        }
+        if (response.status === 404) {
+            throw new Error('接口未找到 (404)，请检查服务器服务是否正常');
+        }
+        throw new Error(`服务器响应异常 (${response.status}): ${text.slice(0, 80)}`);
+    }
+
     // ---- Load & Refresh Data ----
     async function refreshAllData() {
         await Promise.all([fetchKeys(), fetchSites()]);
     }
 
     async function fetchKeys() {
-        const response = await fetch(`/api/admin/keys?password=${encodeURIComponent(adminPassword)}`);
-        const data = await response.json();
-        if (!response.ok || !data.success) {
-            throw new Error(data.message || '密码错误');
-        }
+        const data = await safeFetchJson(`/api/admin/keys?password=${encodeURIComponent(adminPassword)}`);
         allKeys = data.data.keys || [];
         updateKeyStatsAndTable();
     }
@@ -229,14 +249,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function fetchSites() {
         try {
-            const response = await fetch(`/api/admin/sites?password=${encodeURIComponent(adminPassword)}`);
-            const data = await response.json();
+            const data = await safeFetchJson(`/api/admin/sites?password=${encodeURIComponent(adminPassword)}`);
             if (data.success) {
                 allSites = data.data.sites || [];
                 updateSiteStatsAndTable();
             }
         } catch (e) {
-            console.warn('Failed to fetch sites:', e);
+            console.warn('Failed to fetch sites:', e.message);
         }
     }
 
