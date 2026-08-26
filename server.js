@@ -9,7 +9,7 @@ const AdmZip = require('adm-zip');
 const mime = require('mime-types');
 const crypto = require('crypto');
 const uuidv4 = () => crypto.randomUUID();
-const { S3Client, PutObjectCommand, HeadBucketCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, HeadBucketCommand, GetObjectCommand, ListObjectsV2Command, DeleteObjectsCommand } = require('@aws-sdk/client-s3');
 const { Readable } = require('stream');
 const { clerkMiddleware, getAuth, clerkClient, verifyToken } = require('@clerk/express');
 let zhCN = {};
@@ -533,6 +533,88 @@ function uploadFileToLocal(fileBuffer, key) {
   }
   fs.writeFileSync(filePath, fileBuffer);
   return `/_sites/${key}`;
+}
+
+// Delete all files belonging to a site from Cloudflare R2 (prefix: sites/{siteId}/)
+async function deleteSiteFromR2(siteId) {
+  if (!siteId || !isR2Configured()) {
+    return { success: false, deletedCount: 0 };
+  }
+
+  const cfg = getR2Config();
+  const client = createS3Client();
+  const prefix = `sites/${siteId}/`;
+  let totalDeleted = 0;
+  let isTruncated = true;
+  let continuationToken = undefined;
+
+  try {
+    while (isTruncated) {
+      const listParams = {
+        Bucket: cfg.bucketName,
+        Prefix: prefix,
+        ContinuationToken: continuationToken
+      };
+
+      const listResponse = await client.send(new ListObjectsV2Command(listParams));
+      const objects = listResponse.Contents || [];
+
+      if (objects.length > 0) {
+        const deleteParams = {
+          Bucket: cfg.bucketName,
+          Delete: {
+            Objects: objects.map(obj => ({ Key: obj.Key })),
+            Quiet: true
+          }
+        };
+
+        const deleteResponse = await client.send(new DeleteObjectsCommand(deleteParams));
+        totalDeleted += objects.length;
+        if (deleteResponse.Errors && deleteResponse.Errors.length > 0) {
+          console.error(`[R2] Delete partial errors for site ${siteId}:`, deleteResponse.Errors);
+        }
+      }
+
+      isTruncated = listResponse.IsTruncated || false;
+      continuationToken = listResponse.NextContinuationToken;
+    }
+
+    console.log(`[R2] Successfully deleted ${totalDeleted} file(s) for site ${siteId} (Prefix: ${prefix})`);
+    return { success: true, deletedCount: totalDeleted };
+  } catch (err) {
+    console.error(`[R2] Failed to delete site ${siteId} files:`, err.message);
+    return { success: false, error: err.message, deletedCount: totalDeleted };
+  }
+}
+
+// Delete local site directory and files
+function deleteSiteFromLocal(siteId) {
+  if (!siteId) return;
+  const localDir = path.join(LOCAL_SITES_DIR, 'sites', siteId);
+  if (fs.existsSync(localDir)) {
+    try {
+      fs.rmSync(localDir, { recursive: true, force: true });
+      console.log(`[Local] Successfully deleted local directory for site ${siteId}`);
+    } catch (err) {
+      console.error(`[Local] Failed to delete local site dir ${localDir}:`, err.message);
+    }
+  }
+}
+
+// Unified cleanup helper for site files (both Cloudflare R2 and local)
+async function deleteSiteFiles(siteId) {
+  if (!siteId) return;
+  // Always clean up local directory if it exists
+  deleteSiteFromLocal(siteId);
+
+  // Clean up Cloudflare R2 bucket objects
+  if (isR2Configured()) {
+    try {
+      await deleteSiteFromR2(siteId);
+    } catch (err) {
+      console.error(`[Storage] Error deleting R2 files for site ${siteId}:`, err.message);
+    }
+  }
 }
 
 // ==================== Subdomain Dynamic Router ====================
@@ -1692,38 +1774,34 @@ app.get('/api/admin/sites', (req, res) => {
 });
 
 // --- Admin: Delete Site ---
-app.delete('/api/admin/sites', (req, res) => {
-  const { password, siteId } = req.body;
+app.delete('/api/admin/sites', async (req, res) => {
+  try {
+    const { password, siteId } = req.body || {};
 
-  if (password !== ADMIN_PASSWORD) {
-    return res.status(403).json({ success: false, message: '管理员密码错误' });
-  }
-
-  if (!siteId) {
-    return res.status(400).json({ success: false, message: '请提供站点 ID' });
-  }
-
-  const targetSite = db.sites.getById(siteId);
-
-  if (!targetSite) {
-    return res.status(404).json({ success: false, message: '未找到指定站点' });
-  }
-
-  // Remove local directory if stored locally
-  if (targetSite.storage === 'local' || !isR2Configured()) {
-    const localDir = path.join(LOCAL_SITES_DIR, 'sites', siteId);
-    if (fs.existsSync(localDir)) {
-      try {
-        fs.rmSync(localDir, { recursive: true, force: true });
-      } catch (err) {
-        console.error(`Failed to delete local site dir ${localDir}:`, err);
-      }
+    if (password !== ADMIN_PASSWORD) {
+      return res.status(403).json({ success: false, message: '管理员密码错误' });
     }
+
+    if (!siteId) {
+      return res.status(400).json({ success: false, message: '请提供站点 ID' });
+    }
+
+    const targetSite = db.sites.getById(siteId);
+
+    if (!targetSite) {
+      return res.status(404).json({ success: false, message: '未找到指定站点' });
+    }
+
+    // Delete files from Cloudflare R2 bucket and local directory
+    await deleteSiteFiles(siteId);
+
+    db.sites.delete(siteId);
+
+    return res.json({ success: true, message: `已成功删除站点「${siteId}」及其云端/本地存储文件` });
+  } catch (err) {
+    console.error('Admin delete site error:', err);
+    return res.status(500).json({ success: false, message: '删除失败: ' + err.message });
   }
-
-  db.sites.delete(siteId);
-
-  return res.json({ success: true, message: `已成功删除站点「${siteId}」` });
 });
 
 // --- Admin: Get R2 Config ---
@@ -2070,16 +2148,8 @@ app.delete('/api/user/sites', async (req, res) => {
       return res.status(404).json({ success: false, message: '未找到指定站点或无权删除' });
     }
 
-    if (targetSite.storage === 'local' || !isR2Configured()) {
-      const localDir = path.join(LOCAL_SITES_DIR, 'sites', siteId);
-      if (fs.existsSync(localDir)) {
-        try {
-          fs.rmSync(localDir, { recursive: true, force: true });
-        } catch (err) {
-          console.error(`Failed to delete local site dir ${localDir}:`, err);
-        }
-      }
-    }
+    // Delete files from Cloudflare R2 bucket and local directory
+    await deleteSiteFiles(siteId);
 
     db.sites.delete(siteId);
 

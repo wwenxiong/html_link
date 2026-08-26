@@ -954,7 +954,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function deleteSingleSite(siteId) {
-        if (!confirm(`确定要删除已部署站点「${siteId}」及其相关本地文件吗？`)) return;
+        if (!confirm(`确定要删除已部署站点「${siteId}」及其相关存储文件（含云端 R2 与本地）吗？`)) return;
         try {
             const response = await fetch('/api/admin/sites', {
                 method: 'DELETE',
