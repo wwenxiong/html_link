@@ -299,34 +299,52 @@
                         <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><polyline points="6 9 12 15 18 9"></polyline></svg>
                     </div>
                     <div class="faq-answer">
-                        <p>支持单个 .html 网页文件，或者包含 index.html 及相关 css/js/图片 等静态资源的 .zip 压缩包。您也可以直接粘贴 HTML 代码。</p>
+                        <p>支持单个 <code>.html</code> / <code>.htm</code> 网页文件，或者包含 <code>index.html</code> 及相关 css、js、图片、字体等静态资源的 <code>.zip</code> 压缩包。您也可以直接在文本框中粘贴 HTML 源码。</p>
                     </div>
                 </div>
                 <div class="faq-item glass-panel">
                     <div class="faq-question">
-                        <h4>支持动态网站（如 PHP, Java, Node.js）吗？</h4>
+                        <h4>支持动态网站（如 PHP, Java, Node.js, Python）吗？</h4>
                         <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><polyline points="6 9 12 15 18 9"></polyline></svg>
                     </div>
                     <div class="faq-answer">
-                        <p>不支持。本平台仅支持静态网页部署（纯前端代码：HTML, CSS, JS）。所有需要在服务器端运行的代码都无法生效。</p>
+                        <p>不支持。本平台专注于静态前端网页的高速托管与分发（纯前端技术栈：HTML、CSS、JavaScript）。如需接口数据交互，可在前端代码中直接调用第三方云函数或公开后端 API。</p>
                     </div>
                 </div>
                 <div class="faq-item glass-panel">
                     <div class="faq-question">
-                        <h4>卡密可以生成多少次链接？</h4>
+                        <h4>卡密的使用次数和有效期如何计算？</h4>
                         <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><polyline points="6 9 12 15 18 9"></polyline></svg>
                     </div>
                     <div class="faq-answer">
-                        <p>所有卡密在<b>有效期内均支持无限次生成链接</b>！首次使用卡密时自动激活有效期（支持 3天、1个月、半年、1年），在有效期届满前您可以不限次数上传与托管任意多个网页。</p>
+                        <p>• <b>首次激活</b>：新卡密在第一次使用（用于部署或续期）时自动激活并起算有效期（支持 3天、1个月、季卡、半年卡、年卡等）。<br>• <b>使用额度</b>：支持「不限次数卡」与「固定额度卡（如单次卡、3次卡）」。在有效期内且剩余额度大于 0 时，可自由部署或续期站点。<br>• <b>资产中心</b>：登录用户使用过的卡密将自动归档至「我的个人中心」，可随时查看剩余额度、到期时间并一键复制。</p>
                     </div>
                 </div>
                 <div class="faq-item glass-panel">
                     <div class="faq-question">
-                        <h4>上传的文件大小有限制吗？</h4>
+                        <h4>生成的链接有效期是多久？到期后怎么办？</h4>
                         <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><polyline points="6 9 12 15 18 9"></polyline></svg>
                     </div>
                     <div class="faq-answer">
-                        <p>有的。为保证访问速度和服务器稳定，单次上传的文件（或压缩包）最大限制为 20MB。粘贴代码的字符数也没有限制，但同样受整体大小限制。</p>
+                        <p>每次部署生成的网页链接有效期与所使用卡密的套餐时长一致（自生成之时起算完整时长）。链接到期后将暂停外网访问，您可随时在「我的个人中心」找到该站点，输入新卡密进行<b>一键无缝续期</b>，无需重新上传文件。</p>
+                    </div>
+                </div>
+                <div class="faq-item glass-panel">
+                    <div class="faq-question">
+                        <h4>上传的文件大小有限制吗？访问速度如何？</h4>
+                        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </div>
+                    <div class="faq-answer">
+                        <p>单次上传的网页文件或 ZIP 压缩包最大支持 <b>20MB</b>。所有网页资源均托管在全球极速 CDN 边缘节点，享受全球 Anycast 高速分发与 HTTPS 安全加密，并在「我的个人中心」支持一键放大展示访问二维码。</p>
+                    </div>
+                </div>
+                <div class="faq-item glass-panel">
+                    <div class="faq-question">
+                        <h4>删除站点后云端存储会同步清理吗？</h4>
+                        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </div>
+                    <div class="faq-answer">
+                        <p>是的。当您在「我的个人中心」删除站点时，系统都会自动同步彻底删除云端存储桶中的对应文件夹及所有静态资源，不留任何冗余数据，保障隐私与安全。</p>
                     </div>
                 </div>
             </div>
@@ -342,30 +360,57 @@
     </footer>
 
 
-    <!-- User Sites Modal (我的站点) -->
+    <!-- User Sites Modal (我的站点与密钥) -->
     <div class="modal-overlay hidden" id="mySitesModal">
         <div class="modal-container user-sites-container glass-panel">
             <div class="modal-header">
                 <div class="modal-title-wrap">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
-                    <h3>我的部署站点</h3>
+                    <h3>我的个人中心</h3>
                 </div>
                 <button class="btn-close" id="closeMySitesBtn">&times;</button>
             </div>
             <div class="user-sites-body">
-                <div id="userSitesLoading" class="user-sites-loading">
-                    <div class="skeleton-cards">
-                        <div class="skeleton-card"><div class="sk-line sk-title"></div><div class="sk-line sk-text"></div><div class="sk-line sk-short"></div></div>
-                        <div class="skeleton-card"><div class="sk-line sk-title"></div><div class="sk-line sk-text"></div><div class="sk-line sk-short"></div></div>
+                <!-- Navigation Tabs -->
+                <div class="user-modal-tabs" style="display: flex; gap: 8px; margin-bottom: 16px; padding-bottom: 10px; border-bottom: 1px solid var(--mac-border);">
+                    <button class="user-tab-btn active" data-tab="sites" id="tabBtnSites" style="display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 8px; border: 1px solid transparent; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s ease;">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+                        <span>已部署站点 (<span id="userSitesCount">0</span>)</span>
+                    </button>
+                    <button class="user-tab-btn" data-tab="keys" id="tabBtnKeys" style="display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 8px; border: 1px solid transparent; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s ease;">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+                        <span>我的卡密密钥 (<span id="userKeysCount">0</span>)</span>
+                    </button>
+                </div>
+
+                <!-- Sites Tab Pane -->
+                <div id="userSitesTabPane" class="user-tab-pane">
+                    <div id="userSitesLoading" class="user-sites-loading">
+                        <div class="skeleton-cards">
+                            <div class="skeleton-card"><div class="sk-line sk-title"></div><div class="sk-line sk-text"></div><div class="sk-line sk-short"></div></div>
+                            <div class="skeleton-card"><div class="sk-line sk-title"></div><div class="sk-line sk-text"></div><div class="sk-line sk-short"></div></div>
+                        </div>
+                    </div>
+                    <div id="userSitesEmpty" class="user-sites-empty hidden">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
+                        <p>暂无已保存的部署站点</p>
+                        <span>登录后部署的网页将自动归档在这里，方便您随时查看、复制链接和管理。</span>
+                    </div>
+                    <div id="userSitesList" class="user-sites-list hidden">
+                        <!-- Dynamic Site Cards -->
                     </div>
                 </div>
-                <div id="userSitesEmpty" class="user-sites-empty hidden">
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
-                    <p>暂无已保存的部署站点</p>
-                    <span>登录后部署的网页将自动归档在这里，方便您随时查看、复制链接和管理。</span>
-                </div>
-                <div id="userSitesList" class="user-sites-list hidden">
-                    <!-- Dynamic Site Cards -->
+
+                <!-- Keys Tab Pane -->
+                <div id="userKeysTabPane" class="user-tab-pane hidden">
+                    <div id="userKeysEmpty" class="user-sites-empty hidden">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+                        <p>暂无关联的卡密密钥</p>
+                        <span>您首次使用卡密部署或续期网页后，该卡密将自动归属并展示在这里。</span>
+                    </div>
+                    <div id="userKeysList" class="user-sites-list hidden">
+                        <!-- Dynamic Key Cards -->
+                    </div>
                 </div>
             </div>
         </div>
@@ -409,6 +454,35 @@
                     <span class="btn-text"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>立即为站点续期</span>
                     <span class="btn-loader hidden"><svg class="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg><span>续期处理中...</span></span>
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Site QR Code Modal (二维码展示放大) -->
+    <div class="modal-overlay hidden" id="siteQrcodeModal" style="z-index: 1100;">
+        <div class="modal-container glass-panel" style="max-width: 400px; text-align: center;">
+            <div class="modal-header" style="justify-content: space-between;">
+                <div class="modal-title-wrap">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                    <h3 id="modalQrcodeTitle">网页访问二维码</h3>
+                </div>
+                <button class="btn-close" id="closeQrcodeModalBtn">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 24px 20px 20px; display: flex; flex-direction: column; align-items: center;">
+                <div class="site-qrcode-card" style="background: #ffffff; padding: 18px; border-radius: 16px; box-shadow: 0 12px 28px rgba(0,0,0,0.22); display: flex; justify-content: center; align-items: center; margin-bottom: 16px;">
+                    <div id="modalQrcodeContainer" style="display: flex; justify-content: center; align-items: center; min-width: 200px; min-height: 200px;"></div>
+                </div>
+                <p id="modalQrcodeSubdomain" style="font-size: 13px; color: var(--text-secondary); word-break: break-all; margin: 0 0 16px; font-weight: 500;"></p>
+                <div class="site-qrcode-actions" style="display: flex; gap: 10px; width: 100%;">
+                    <button class="btn btn-outline" id="modalQrcodeCopyBtn" style="flex: 1; padding: 9px 12px; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                        <span>复制链接</span>
+                    </button>
+                    <a href="#" id="modalQrcodeOpenBtn" target="_blank" rel="noopener" class="btn btn-primary" style="flex: 1; padding: 9px 12px; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                        <span>打开访问</span>
+                    </a>
+                </div>
             </div>
         </div>
     </div>

@@ -53,6 +53,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const userSitesLoading = document.getElementById('userSitesLoading');
     const userSitesEmpty = document.getElementById('userSitesEmpty');
     const userSitesList = document.getElementById('userSitesList');
+    const tabBtnSites = document.getElementById('tabBtnSites');
+    const tabBtnKeys = document.getElementById('tabBtnKeys');
+    const userSitesTabPane = document.getElementById('userSitesTabPane');
+    const userKeysTabPane = document.getElementById('userKeysTabPane');
+    const userSitesCount = document.getElementById('userSitesCount');
+    const userKeysCount = document.getElementById('userKeysCount');
+    const userKeysList = document.getElementById('userKeysList');
+    const userKeysEmpty = document.getElementById('userKeysEmpty');
     
     // FAQ
     const faqItems = document.querySelectorAll('.faq-item');
@@ -63,12 +71,20 @@ document.addEventListener('DOMContentLoaded', () => {
     let publicDomainConfig = { primaryDomain: '', protocol: 'http://' };
     let clerkInstance = null;
     let currentUserSites = [];
+    let currentUserKeys = [];
     try {
         const cached = localStorage.getItem('cached_user_sites');
         if (cached) {
             currentUserSites = JSON.parse(cached);
             if (Array.isArray(currentUserSites) && currentUserSites.length > 0 && mySitesBadge) {
                 mySitesBadge.textContent = currentUserSites.length;
+            }
+        }
+        const cachedKeys = localStorage.getItem('cached_user_keys');
+        if (cachedKeys) {
+            currentUserKeys = JSON.parse(cachedKeys);
+            if (Array.isArray(currentUserKeys) && userKeysCount) {
+                userKeysCount.textContent = currentUserKeys.length;
             }
         }
     } catch (e) {}
@@ -700,15 +716,11 @@ document.addEventListener('DOMContentLoaded', () => {
         setPathStatus('');
     });
 
-    // ---- FAQ Accordion ----
+    // ---- FAQ Accordion (Multi-Expand Supported) ----
     faqItems.forEach(item => {
         const question = item.querySelector('.faq-question');
         question.addEventListener('click', () => {
-            const isActive = item.classList.contains('active');
-            faqItems.forEach(i => i.classList.remove('active'));
-            if (!isActive) {
-                item.classList.add('active');
-            }
+            item.classList.toggle('active');
         });
     });
 
@@ -1023,12 +1035,32 @@ document.addEventListener('DOMContentLoaded', () => {
         }, true);
     });
 
+    if (tabBtnSites && tabBtnKeys) {
+        tabBtnSites.addEventListener('click', () => {
+            tabBtnSites.classList.add('active');
+            tabBtnKeys.classList.remove('active');
+            userSitesTabPane?.classList.remove('hidden');
+            userKeysTabPane?.classList.add('hidden');
+        });
+        tabBtnKeys.addEventListener('click', () => {
+            tabBtnKeys.classList.add('active');
+            tabBtnSites.classList.remove('active');
+            userKeysTabPane?.classList.remove('hidden');
+            userSitesTabPane?.classList.add('hidden');
+        });
+    }
+
     if (mySitesBtn) {
         mySitesBtn.addEventListener('click', () => {
             if (mySitesModal) {
                 mySitesModal.classList.remove('hidden');
                 if (currentUserSites && currentUserSites.length > 0) {
                     renderUserSites(currentUserSites);
+                }
+                if (currentUserKeys && currentUserKeys.length > 0) {
+                    renderUserKeys(currentUserKeys);
+                }
+                if ((currentUserSites && currentUserSites.length > 0) || (currentUserKeys && currentUserKeys.length > 0)) {
                     loadUserSites(false);
                 } else {
                     loadUserSites(true);
@@ -1048,6 +1080,59 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const closeQrcodeModalBtn = document.getElementById('closeQrcodeModalBtn');
+    const siteQrcodeModal = document.getElementById('siteQrcodeModal');
+    if (closeQrcodeModalBtn && siteQrcodeModal) {
+        closeQrcodeModalBtn.addEventListener('click', () => {
+            siteQrcodeModal.classList.add('hidden');
+        });
+        siteQrcodeModal.addEventListener('click', (e) => {
+            if (e.target === siteQrcodeModal) {
+                siteQrcodeModal.classList.add('hidden');
+            }
+        });
+    }
+
+    function openQrcodeModal(url, siteName) {
+        const modal = document.getElementById('siteQrcodeModal');
+        const container = document.getElementById('modalQrcodeContainer');
+        const titleEl = document.getElementById('modalQrcodeTitle');
+        const subEl = document.getElementById('modalQrcodeSubdomain');
+        const copyBtn = document.getElementById('modalQrcodeCopyBtn');
+        const openBtn = document.getElementById('modalQrcodeOpenBtn');
+
+        if (!modal || !container) return;
+
+        if (titleEl) titleEl.textContent = siteName ? `站点二维码 - ${siteName}` : '网页访问二维码';
+        if (subEl) subEl.textContent = url;
+        if (openBtn) openBtn.href = url;
+
+        container.innerHTML = '';
+        if (typeof QRCode !== 'undefined') {
+            new QRCode(container, {
+                text: url,
+                width: 200,
+                height: 200,
+                colorDark: '#0f172a',
+                colorLight: '#ffffff',
+                correctLevel: QRCode.CorrectLevel.H
+            });
+        }
+
+        if (copyBtn) {
+            copyBtn.onclick = async () => {
+                try {
+                    await navigator.clipboard.writeText(url);
+                    showToast('链接已复制到剪贴板', 'success');
+                } catch {
+                    showToast('复制失败，请手动复制', 'error');
+                }
+            };
+        }
+
+        modal.classList.remove('hidden');
+    }
+
     async function loadUserSites(showLoading = true) {
         if (!clerkInstance || !clerkInstance.isSignedIn) return;
 
@@ -1055,6 +1140,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentUserSites && currentUserSites.length > 0) {
             renderUserSites(currentUserSites);
             showLoading = false;
+        }
+        if (currentUserKeys && currentUserKeys.length > 0) {
+            renderUserKeys(currentUserKeys);
         }
 
         if (showLoading && userSitesLoading) {
@@ -1092,13 +1180,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (data && data.success) {
                 currentUserSites = data.data.sites || [];
+                currentUserKeys = data.data.keys || [];
                 try {
                     localStorage.setItem('cached_user_sites', JSON.stringify(currentUserSites));
+                    localStorage.setItem('cached_user_keys', JSON.stringify(currentUserKeys));
                 } catch (e) {}
                 if (mySitesBadge) {
                     mySitesBadge.textContent = currentUserSites.length;
                 }
+                if (userSitesCount) {
+                    userSitesCount.textContent = currentUserSites.length;
+                }
+                if (userKeysCount) {
+                    userKeysCount.textContent = currentUserKeys.length;
+                }
                 renderUserSites(currentUserSites);
+                renderUserKeys(currentUserKeys);
             }
         } catch (e) {
             // On timeout/abort: if we have cached data, it's already rendered; otherwise show empty
@@ -1106,6 +1203,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.warn('loadUserSites: fetch timed out');
                 if (!currentUserSites || currentUserSites.length === 0) {
                     renderUserSites([]);
+                }
+                if (!currentUserKeys || currentUserKeys.length === 0) {
+                    renderUserKeys([]);
                 }
             } else {
                 console.error('Failed to load user sites:', e);
@@ -1117,6 +1217,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderUserSites(sites) {
         if (!userSitesList || !userSitesEmpty) return;
+
+        if (userSitesCount) userSitesCount.textContent = (sites && sites.length) || 0;
 
         if (!sites || sites.length === 0) {
             userSitesEmpty.classList.remove('hidden');
@@ -1156,12 +1258,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                         <span>复制链接</span>
                     </button>
+                    <button class="btn-icon-text qrcode-site-btn" data-url="${site.url}" data-name="${escapeHtml(site.subdomain || site.siteId)}">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                        <span>二维码</span>
+                    </button>
                     <button class="btn-icon-text renew-site-btn" data-subdomain="${escapeHtml(site.subdomain || site.siteId)}" data-expires="${escapeHtml(site.expiresAt || '')}">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
                         <span>续期</span>
                     </button>
                     <button class="btn-icon-text preview-site-link" data-url="${site.url}">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                         <span>预览</span>
                     </button>
                     <button class="btn-icon-text danger delete-site-btn" data-id="${site.siteId}" data-name="${site.subdomain || site.siteId}">
@@ -1179,6 +1285,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 } catch {
                     showToast('复制失败，请手动复制', 'error');
                 }
+            });
+
+            card.querySelector('.qrcode-site-btn').addEventListener('click', (e) => {
+                const url = e.currentTarget.getAttribute('data-url');
+                const name = e.currentTarget.getAttribute('data-name');
+                openQrcodeModal(url, name);
             });
 
             card.querySelector('.renew-site-btn').addEventListener('click', (e) => {
@@ -1228,6 +1340,127 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             userSitesList.appendChild(card);
+        });
+    }
+
+    function renderUserKeys(keys) {
+        if (!userKeysList || !userKeysEmpty) return;
+
+        if (userKeysCount) userKeysCount.textContent = (keys && keys.length) || 0;
+
+        if (!keys || keys.length === 0) {
+            userKeysEmpty.classList.remove('hidden');
+            userKeysList.classList.add('hidden');
+            return;
+        }
+
+        userKeysEmpty.classList.add('hidden');
+        userKeysList.classList.remove('hidden');
+        userKeysList.innerHTML = '';
+
+        const durNames = {
+            '3d': '3天体验卡',
+            '7d': '7天周卡',
+            '1m': '1个月月卡',
+            '3m': '3个月季卡',
+            '6m': '半年卡(6个月)',
+            '1y': '1年年卡',
+            'forever': '永久有效卡',
+            'unlimited': '永久有效卡'
+        };
+
+        keys.forEach(k => {
+            const card = document.createElement('div');
+            card.className = 'user-site-card';
+
+            const isExp = k.isExpired;
+            const maxUses = Number(k.maxUses) || 0;
+            const usedCount = Number(k.usedCount) || 0;
+            const isExhausted = maxUses > 0 && usedCount >= maxUses;
+
+            let statusBadge = '<span class="user-site-badge active">正常有效</span>';
+            if (isExp) {
+                statusBadge = '<span class="user-site-badge expired">已到期</span>';
+            } else if (isExhausted) {
+                statusBadge = '<span class="user-site-badge" style="background: rgba(239, 68, 68, 0.15); color: var(--accent-error); border: 1px solid rgba(239, 68, 68, 0.3);">已达次数上限</span>';
+            } else if (!k.activatedAt) {
+                statusBadge = '<span class="user-site-badge" style="background: rgba(59, 130, 246, 0.15); color: var(--mac-blue); border: 1px solid rgba(59, 130, 246, 0.3);">未激活</span>';
+            }
+
+            const expDateStr = k.expiresAt 
+                ? new Date(k.expiresAt).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) 
+                : (k.activatedAt ? '长期有效' : '未激活');
+
+            const activatedDateStr = k.activatedAt 
+                ? new Date(k.activatedAt).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) 
+                : '尚未激活';
+
+            const durationText = durNames[k.duration] || k.duration;
+            const quotaDisplay = maxUses > 0 ? `${maxUses} 次` : '不限次数';
+            const remainingDisplay = maxUses > 0 ? `${Math.max(0, maxUses - usedCount)} 次` : '无限制';
+
+            card.innerHTML = `
+                <div class="user-site-top">
+                    <div class="key-header-left">
+                        <div class="key-title-row">
+                            <span class="key-code-tag">${escapeHtml(k.key)}</span>
+                            ${statusBadge}
+                        </div>
+                        <div class="key-sub-row">
+                            <span class="badge badge-duration" style="font-size: 11px; padding: 2px 8px; border-radius: 6px; background: rgba(59, 130, 246, 0.12); color: var(--mac-blue); font-weight: 600;">${durationText}</span>
+                            <span>• 首次激活: ${activatedDateStr}</span>
+                        </div>
+                    </div>
+                    <div class="user-site-actions">
+                        <button class="btn-icon-text copy-cdkey-btn" data-key="${escapeHtml(k.key)}" title="点击复制完整卡密">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                            <span>复制卡密</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="key-stats-grid">
+                    <div class="key-stat-box">
+                        <span class="key-stat-label">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                            到期时间
+                        </span>
+                        <span class="key-stat-value" title="${expDateStr}">${expDateStr}</span>
+                    </div>
+                    <div class="key-stat-box">
+                        <span class="key-stat-label">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                            剩余可用
+                        </span>
+                        <span class="key-stat-value" style="color: ${isExhausted ? 'var(--accent-error)' : 'var(--accent-success, #10b981)'}; font-weight: 700;">${remainingDisplay}</span>
+                    </div>
+                    <div class="key-stat-box">
+                        <span class="key-stat-label">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            已使用
+                        </span>
+                        <span class="key-stat-value">${usedCount} 次</span>
+                    </div>
+                    <div class="key-stat-box">
+                        <span class="key-stat-label">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+                            总可用额度
+                        </span>
+                        <span class="key-stat-value" style="color: var(--mac-blue);">${quotaDisplay}</span>
+                    </div>
+                </div>
+            `;
+
+            card.querySelector('.copy-cdkey-btn').addEventListener('click', async (e) => {
+                const keyText = e.currentTarget.getAttribute('data-key');
+                try {
+                    await navigator.clipboard.writeText(keyText);
+                    showToast('卡密已复制到剪贴板', 'success');
+                } catch {
+                    showToast('复制失败，请手动复制', 'error');
+                }
+            });
+
+            userKeysList.appendChild(card);
         });
     }
 

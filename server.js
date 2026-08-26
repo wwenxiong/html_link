@@ -805,7 +805,7 @@ function validateCDKey(cdkey) {
   return { valid: true, keyObj };
 }
 
-function consumeCDKey(cdkey, siteId) {
+function consumeCDKey(cdkey, siteId, userId = null, userEmail = null) {
   if (!cdkey) return null;
   const cleanKey = cdkey.trim().toUpperCase();
   const keyObj = db.cdkeys.getByKey(cleanKey);
@@ -815,6 +815,10 @@ function consumeCDKey(cdkey, siteId) {
   const currentUsedCount = Number(keyObj.usedCount) || 0;
   if (maxUses > 0 && currentUsedCount >= maxUses) {
     keyObj.status = 'used';
+    if ((userId || userEmail) && !keyObj.userId && !keyObj.userEmail) {
+      if (userId) keyObj.userId = userId;
+      if (userEmail) keyObj.userEmail = userEmail;
+    }
     db.cdkeys.save(keyObj);
     return null;
   }
@@ -827,6 +831,12 @@ function consumeCDKey(cdkey, siteId) {
   if (!keyObj.activatedAt && !keyObj.expiresAt) {
     keyObj.activatedAt = now.toISOString();
     keyObj.expiresAt = calculateExpiresAt(effectiveDuration, now);
+  }
+
+  // Associate user ownership if user is logged in (first time use associates with user)
+  if (userId || userEmail) {
+    if (!keyObj.userId && userId) keyObj.userId = userId;
+    if (!keyObj.userEmail && userEmail) keyObj.userEmail = userEmail;
   }
 
   // Check if expired
@@ -1242,7 +1252,7 @@ app.post('/api/deploy', upload.single('file'), async (req, res) => {
     }
 
     // 5. Consume / record CDKEY (activates key on first use, increments usage count)
-    const consumedKeyInfo = consumeCDKey(cdkey.trim(), siteId);
+    const consumedKeyInfo = consumeCDKey(cdkey.trim(), siteId, userId, userEmail);
     const keyDuration = consumedKeyInfo ? (consumedKeyInfo.duration || '1m') : '1m';
 
     // Link validity is calculated from this link's generation date for the full duration!
@@ -1413,7 +1423,7 @@ app.post('/api/renew', async (req, res) => {
     } catch (ae) {}
 
     // 3. Consume / Link CDKEY
-    const consumedKey = consumeCDKey(cleanKey, targetSite.siteId);
+    const consumedKey = consumeCDKey(cleanKey, targetSite.siteId, targetSite.userId, targetSite.userEmail);
     const keyDuration = consumedKey ? (consumedKey.duration || '1m') : (keyObj.duration || '1m');
 
     // 4. Calculate new expiresAt for the site (extend by duration from now or from current expiration date)
@@ -2106,11 +2116,56 @@ app.get('/api/user/me', async (req, res) => {
         };
       });
 
+    // Fetch user owned CDKEYs
+    let keys = db.cdkeys.findByUserIdOrEmail(auth.userId, userEmail);
+
+    // Auto-link any historical unlinked keys used in user's sites
+    for (const s of sites) {
+      const siteKeys = [s.cdkey, s.lastCdkey].filter(Boolean);
+      for (const kStr of siteKeys) {
+        const clean = kStr.trim().toUpperCase();
+        if (!keys.some(k => k.key.toUpperCase() === clean)) {
+          const kObj = db.cdkeys.getByKey(clean);
+          if (kObj) {
+            if (!kObj.userId && !kObj.userEmail) {
+              kObj.userId = auth.userId;
+              if (userEmail) kObj.userEmail = userEmail;
+              db.cdkeys.save(kObj);
+            }
+            keys.push(kObj);
+          }
+        }
+      }
+    }
+
+    const userKeys = keys.map(k => {
+      const maxUses = Number(k.maxUses) || 0;
+      const usedCount = Number(k.usedCount) || 0;
+      const remainingUses = maxUses > 0 ? Math.max(0, maxUses - usedCount) : -1;
+      const isKeyExpired = k.expiresAt ? isExpired(k.expiresAt) : false;
+      return {
+        key: k.key,
+        duration: k.duration || '3d',
+        status: isKeyExpired ? 'expired' : (maxUses > 0 && usedCount >= maxUses ? 'used' : (k.status || 'active')),
+        maxUses,
+        usedCount,
+        remainingUses,
+        isUnlimited: maxUses === 0,
+        activatedAt: k.activatedAt || null,
+        expiresAt: k.expiresAt || null,
+        isExpired: isKeyExpired,
+        lastUsedAt: k.lastUsedAt || null,
+        lastUsedBySiteId: k.lastUsedBySiteId || null,
+        createdAt: k.createdAt
+      };
+    });
+
     return res.json({
       success: true,
       data: {
         user: userDetails,
-        sites: userSites
+        sites: userSites,
+        keys: userKeys
       }
     });
   } catch (err) {
