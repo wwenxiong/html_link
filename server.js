@@ -9,7 +9,8 @@ const AdmZip = require('adm-zip');
 const mime = require('mime-types');
 const crypto = require('crypto');
 const uuidv4 = () => crypto.randomUUID();
-const { S3Client, PutObjectCommand, HeadBucketCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, HeadBucketCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { Readable } = require('stream');
 const { clerkMiddleware, getAuth, clerkClient, verifyToken } = require('@clerk/express');
 let zhCN = {};
 try {
@@ -325,23 +326,221 @@ const upload = multer({
   limits: { fileSize: 20 * 1024 * 1024 }
 });
 
-// ==================== Subdomain Dynamic Router ====================
-app.use((req, res, next) => {
-  // Fast pass for /api routes and static assets
-  if (
-    req.path.startsWith('/api') ||
-    req.path.startsWith('/css/') ||
-    req.path.startsWith('/js/') ||
-    req.path.startsWith('/_sites/') ||
-    req.path === '/favicon.ico'
-  ) {
-    return next();
+// ==================== R2 / S3 Storage Client & Helpers ====================
+function getR2Config() {
+  const config = db.config.getAll();
+  return {
+    accountId: config.accountId || process.env.R2_ACCOUNT_ID || '',
+    accessKeyId: config.accessKeyId || process.env.R2_ACCESS_KEY_ID || '',
+    secretAccessKey: config.secretAccessKey || process.env.R2_SECRET_ACCESS_KEY || '',
+    bucketName: config.bucketName || process.env.R2_BUCKET_NAME || '',
+    publicDomain: config.publicDomain || process.env.R2_PUBLIC_DOMAIN || ''
+  };
+}
+
+function isR2Configured() {
+  const cfg = getR2Config();
+  return !!(cfg.accountId && cfg.accessKeyId && cfg.secretAccessKey && cfg.bucketName && cfg.publicDomain);
+}
+
+function createS3Client() {
+  const cfg = getR2Config();
+  return new S3Client({
+    region: 'auto',
+    endpoint: `https://${cfg.accountId}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId: cfg.accessKeyId,
+      secretAccessKey: cfg.secretAccessKey
+    }
+  });
+}
+
+// Stream / Serve file directly from R2 without changing browser URL
+async function serveR2File(res, siteId, fileRelativePath, req = null) {
+  const cfg = getR2Config();
+  const client = createS3Client();
+  const cleanPath = (fileRelativePath || 'index.html').replace(/^\/+/, '') || 'index.html';
+  const key = `sites/${siteId}/${cleanPath}`;
+
+  const sendS3Stream = (s3Res, statusCode = 200) => {
+    let contentType = s3Res.ContentType || mime.lookup(cleanPath) || 'application/octet-stream';
+    if (contentType.startsWith('text/html') && !contentType.includes('charset')) {
+      contentType += '; charset=utf-8';
+    }
+    res.status(statusCode);
+    res.setHeader('Content-Type', contentType);
+
+    if (s3Res.ContentLength !== undefined) {
+      res.setHeader('Content-Length', s3Res.ContentLength);
+    }
+    if (s3Res.ContentRange) {
+      res.setHeader('Content-Range', s3Res.ContentRange);
+    }
+    if (s3Res.AcceptRanges) {
+      res.setHeader('Accept-Ranges', s3Res.AcceptRanges);
+    } else {
+      res.setHeader('Accept-Ranges', 'bytes');
+    }
+    if (s3Res.ETag) {
+      res.setHeader('ETag', s3Res.ETag);
+    }
+    if (s3Res.LastModified) {
+      res.setHeader('Last-Modified', new Date(s3Res.LastModified).toUTCString());
+    }
+    if (cleanPath.endsWith('.html') || cleanPath === 'index.html') {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    } else {
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+    }
+
+    if (s3Res.Body && typeof s3Res.Body.pipe === 'function') {
+      s3Res.Body.on('error', (err) => {
+        console.error('S3 stream error:', err.message);
+        if (!res.headersSent) res.status(500).send('Storage stream error');
+      });
+      return s3Res.Body.pipe(res);
+    } else if (s3Res.Body && typeof Readable.fromWeb === 'function') {
+      const nodeStream = Readable.fromWeb(s3Res.Body);
+      nodeStream.on('error', (err) => {
+        console.error('S3 web stream error:', err.message);
+        if (!res.headersSent) res.status(500).send('Storage stream error');
+      });
+      return nodeStream.pipe(res);
+    } else {
+      return res.status(500).send('Unable to read storage stream');
+    }
+  };
+
+  const getParams = {
+    Bucket: cfg.bucketName,
+    Key: key
+  };
+  if (req && req.headers && req.headers.range) {
+    getParams.Range = req.headers.range;
   }
 
+  try {
+    const s3Res = await client.send(new GetObjectCommand(getParams));
+    const statusCode = (req && req.headers && req.headers.range && s3Res.ContentRange) ? 206 : 200;
+    return sendS3Stream(s3Res, statusCode);
+  } catch (err) {
+    const is404 = err.name === 'NoSuchKey' || err.name === 'NotFound' || err.$metadata?.httpStatusCode === 404;
+
+    // SPA fallback: if requested path is not index.html and was not found, try index.html
+    if (is404 && cleanPath !== 'index.html') {
+      try {
+        const fallbackParams = {
+          Bucket: cfg.bucketName,
+          Key: `sites/${siteId}/index.html`
+        };
+        const indexRes = await client.send(new GetObjectCommand(fallbackParams));
+        return sendS3Stream(indexRes, 200);
+      } catch (fallbackErr) {
+        // Fallback failed
+      }
+    }
+
+    // Secondary fallback: if S3 client failed with non-404, try HTTP fetch from publicDomain if configured
+    if (!is404 && cfg.publicDomain) {
+      try {
+        const r2PublicDomain = cfg.publicDomain.replace(/\/+$/, '');
+        const r2TargetUrl = `${r2PublicDomain}/${key}`;
+        const fetchRes = await fetch(r2TargetUrl, {
+          headers: req && req.headers && req.headers.range ? { Range: req.headers.range } : {}
+        });
+        if (fetchRes.ok || fetchRes.status === 206) {
+          const contentType = fetchRes.headers.get('content-type') || mime.lookup(cleanPath) || 'application/octet-stream';
+          res.status(fetchRes.status);
+          res.setHeader('Content-Type', contentType.startsWith('text/html') && !contentType.includes('charset') ? contentType + '; charset=utf-8' : contentType);
+          const cl = fetchRes.headers.get('content-length');
+          if (cl) res.setHeader('Content-Length', cl);
+          const cr = fetchRes.headers.get('content-range');
+          if (cr) res.setHeader('Content-Range', cr);
+          const et = fetchRes.headers.get('etag');
+          if (et) res.setHeader('ETag', et);
+
+          if (fetchRes.body) {
+            const nodeStream = Readable.fromWeb(fetchRes.body);
+            nodeStream.on('error', (fetchStreamErr) => {
+              console.error('Fetch stream error:', fetchStreamErr.message);
+              if (!res.headersSent) res.status(500).send('Fetch stream error');
+            });
+            return nodeStream.pipe(res);
+          }
+        }
+      } catch (fetchErr) {
+        console.error('Fetch fallback error:', fetchErr.message);
+      }
+    }
+
+    if (is404) {
+      return res.status(404).send(`
+        <!DOCTYPE html>
+        <html lang="zh-CN">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>404 - 资源未找到</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+            .card { text-align: center; padding: 40px; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); max-width: 420px; }
+            h1 { font-size: 64px; margin: 0; color: #ef4444; }
+            h2 { font-size: 20px; margin: 10px 0 20px; font-weight: 500; }
+            p { color: #94a3b8; font-size: 14px; word-break: break-all; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <h1>404</h1>
+            <h2>文件或页面不存在</h2>
+            <p>路径: <strong>/${cleanPath}</strong></p>
+          </div>
+        </body>
+        </html>
+      `);
+    }
+
+    console.error('R2 serving error:', err);
+    return res.status(500).send('存储服务读取失败: ' + err.message);
+  }
+}
+
+// Upload to Cloudflare R2
+async function uploadFileToR2(fileBuffer, key, contentType) {
+  const cfg = getR2Config();
+  const client = createS3Client();
+
+  const command = new PutObjectCommand({
+    Bucket: cfg.bucketName,
+    Key: key,
+    Body: fileBuffer,
+    ContentType: contentType
+  });
+
+  await client.send(command);
+  const publicDomain = cfg.publicDomain.replace(/\/+$/, '');
+  return `${publicDomain}/${key}`;
+}
+
+// Upload to Local Fallback
+function uploadFileToLocal(fileBuffer, key) {
+  const filePath = path.join(LOCAL_SITES_DIR, key);
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  fs.writeFileSync(filePath, fileBuffer);
+  return `/_sites/${key}`;
+}
+
+// ==================== Subdomain Dynamic Router ====================
+app.use(async (req, res, next) => {
   const hostHeader = (req.headers.host || '').split(':')[0].toLowerCase();
   const { primaryDomain } = getDomainConfig();
 
-  // If no primary domain configured or if host is main domain / reserved API, pass through
+  // If no primary domain configured or if host is main domain / reserved prefix, pass through
   if (!primaryDomain || hostHeader === primaryDomain || hostHeader === `www.${primaryDomain}` || hostHeader.startsWith('admin.') || hostHeader.startsWith('api.')) {
     return next();
   }
@@ -398,6 +597,13 @@ app.use((req, res, next) => {
     reqPath = '/index.html';
   }
 
+  // Record visit analytics for page access
+  if (reqPath === '/index.html' || reqPath === '/') {
+    try {
+      db.sites.incrementVisits(site.siteId);
+    } catch (_) {}
+  }
+
   const fileRelativePath = reqPath.replace(/^\/+/, '');
   const key = `sites/${site.siteId}/${fileRelativePath}`;
 
@@ -416,15 +622,13 @@ app.use((req, res, next) => {
     }
     return res.status(404).send('404 File Not Found');
   } else {
-    const r2Cfg = getR2Config();
-    const r2PublicDomain = r2Cfg.publicDomain.replace(/\/+$/, '');
-    const r2TargetUrl = `${r2PublicDomain}/${key}`;
-    return res.redirect(302, r2TargetUrl);
+    // Transparently stream directly from R2 - URL in browser stays on custom subdomain permanently!
+    return serveR2File(res, site.siteId, fileRelativePath, req);
   }
 });
 
-// Middleware for local site direct access expiration check
-app.use('/_sites/sites/:siteId', (req, res, next) => {
+// Middleware for site direct access (e.g. /_sites/sites/:siteId/*)
+app.use('/_sites/sites/:siteId', async (req, res, next) => {
   const { siteId } = req.params;
   const site = db.sites.findByDomainOrId(siteId);
   if (site) {
@@ -432,6 +636,10 @@ app.use('/_sites/sites/:siteId', (req, res, next) => {
     if (siteExp.isExpired) {
       const { primaryDomain } = getDomainConfig();
       return res.status(410).send(renderExpiredPage(site.subdomain || site.siteId, primaryDomain, siteExp.expiresAt));
+    }
+    if (site.storage === 'r2' && isR2Configured()) {
+      let subPath = req.path.replace(/^\/+/, '') || 'index.html';
+      return serveR2File(res, site.siteId, subPath, req);
     }
   }
   next();
@@ -468,63 +676,7 @@ app.use((req, res, next) => {
 app.use(express.static(path.join(__dirname, 'public')));
 
 
-// ==================== R2 / S3 Client ====================
-function getR2Config() {
-  const config = db.config.getAll();
-  return {
-    accountId: config.accountId || process.env.R2_ACCOUNT_ID || '',
-    accessKeyId: config.accessKeyId || process.env.R2_ACCESS_KEY_ID || '',
-    secretAccessKey: config.secretAccessKey || process.env.R2_SECRET_ACCESS_KEY || '',
-    bucketName: config.bucketName || process.env.R2_BUCKET_NAME || '',
-    publicDomain: config.publicDomain || process.env.R2_PUBLIC_DOMAIN || ''
-  };
-}
 
-function isR2Configured() {
-  const cfg = getR2Config();
-  return !!(cfg.accountId && cfg.accessKeyId && cfg.secretAccessKey && cfg.bucketName && cfg.publicDomain);
-}
-
-function createS3Client() {
-  const cfg = getR2Config();
-  return new S3Client({
-    region: 'auto',
-    endpoint: `https://${cfg.accountId}.r2.cloudflarestorage.com`,
-    credentials: {
-      accessKeyId: cfg.accessKeyId,
-      secretAccessKey: cfg.secretAccessKey
-    }
-  });
-}
-
-// ==================== Upload to R2 ====================
-async function uploadFileToR2(fileBuffer, key, contentType) {
-  const cfg = getR2Config();
-  const client = createS3Client();
-
-  const command = new PutObjectCommand({
-    Bucket: cfg.bucketName,
-    Key: key,
-    Body: fileBuffer,
-    ContentType: contentType
-  });
-
-  await client.send(command);
-  // Build public URL
-  const publicDomain = cfg.publicDomain.replace(/\/+$/, '');
-  return `${publicDomain}/${key}`;
-}
-
-// ==================== Upload to Local Fallback ====================
-function uploadFileToLocal(fileBuffer, key) {
-  const filePath = path.join(LOCAL_SITES_DIR, key);
-  const dir = path.dirname(filePath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-  fs.writeFileSync(filePath, fileBuffer);
-  return `/_sites/${key}`;
-}
 
 // ==================== CDKEY Management ====================
 function getCDKeys() {
