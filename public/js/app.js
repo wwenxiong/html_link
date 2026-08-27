@@ -89,7 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     } catch (e) {}
     const SUBDOMAIN_REGEX = /^[a-z0-9][a-z0-9\-]{1,28}[a-z0-9]$|^[a-z0-9]{3,30}$/;
-    const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
+    const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 
     // ---- Theme Engine (UI/UX Pro Max) ----
     const themeToggleBtn = document.getElementById('themeToggleBtn');
@@ -432,7 +432,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         if (file.size > MAX_FILE_SIZE) {
-            showToast(`文件大小不能超过 20MB (当前: ${formatFileSize(file.size)})`, 'error');
+            showToast(`文件大小不能超过 100MB (当前: ${formatFileSize(file.size)})`, 'error');
             return;
         }
         

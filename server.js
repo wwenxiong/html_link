@@ -266,8 +266,8 @@ function renderExpiredPage(subdomain, primaryDomain, expiresAt) {
 
 // ==================== Middleware ====================
 app.use(cors());
-app.use(express.json({ limit: '25mb' }));
-app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 
 // Cached Clerk Middleware instance to avoid creating new SDK instances on every HTTP request (major CPU & GC killer)
 let cachedClerkMiddleware = null;
@@ -320,10 +320,10 @@ app.use((req, res, next) => {
   next();
 });
 
-// Multer config for file uploads (max 20MB)
+// Multer config for file uploads (max 100MB)
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024 }
+  limits: { fileSize: 100 * 1024 * 1024 }
 });
 
 // ==================== R2 / S3 Storage Client & Helpers ====================
