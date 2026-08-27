@@ -146,6 +146,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const resp = await fetch(url, options);
         const contentType = resp.headers.get('content-type') || '';
         if (!contentType.includes('application/json')) {
+            if (resp.status === 413) {
+                throw new Error('上传的文件体积超出服务器或网关允许上限 (HTTP 413)');
+            }
             throw new Error(`服务器响应格式错误 (HTTP ${resp.status})`);
         }
         const data = await resp.json();
