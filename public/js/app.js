@@ -2,9 +2,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // ---- DOM Elements ----
     
     // Tabs
-    const tabs = document.querySelectorAll('.tab');
+    const tabs = document.querySelectorAll('.deploy-card > .tabs .tab');
     const tabPanes = document.querySelectorAll('.tab-pane');
-    const tabIndicator = document.querySelector('.tab-indicator');
+    const tabIndicator = document.querySelector('.deploy-card > .tabs .tab-indicator');
     let currentUploadMode = 'html'; // 'html', 'zip', 'code'
     
     // Upload Zones
@@ -41,6 +41,34 @@ document.addEventListener('DOMContentLoaded', () => {
     const closePreviewBtn = document.getElementById('closePreviewBtn');
     const previewIframe = document.getElementById('previewIframe');
     const previewExternalLink = document.getElementById('previewExternalLink');
+
+    // Packaging & Target Elements
+    const targetSegmentedControl = document.getElementById('targetSegmentedControl');
+    const targetTabs = targetSegmentedControl ? targetSegmentedControl.querySelectorAll('.tab') : [];
+    const appNameGroup = document.getElementById('appNameGroup');
+    const appNameInput = document.getElementById('appNameInput');
+    const customPathGroup = document.getElementById('customPathGroup');
+    const deployBtnText = document.getElementById('deployBtnText');
+    const deployBtnLoaderText = document.getElementById('deployBtnLoaderText');
+    const quickExportApkBtn = document.getElementById('quickExportApkBtn');
+    const quickExportExeBtn = document.getElementById('quickExportExeBtn');
+
+    // Package Result Modal
+    const packageResultModal = document.getElementById('packageResultModal');
+    const closePackageModalBtn = document.getElementById('closePackageModalBtn');
+    const modalPackageTitle = document.getElementById('modalPackageTitle');
+    const modalPackageIconWrap = document.getElementById('modalPackageIconWrap');
+    const modalPackageAppName = document.getElementById('modalPackageAppName');
+    const modalPackageFileInfo = document.getElementById('modalPackageFileInfo');
+    const modalApkSection = document.getElementById('modalApkSection');
+    const modalApkQrcodeContainer = document.getElementById('modalApkQrcodeContainer');
+    const modalApkDownloadBtn = document.getElementById('modalApkDownloadBtn');
+    const modalExeSection = document.getElementById('modalExeSection');
+    const modalExeDownloadBtn = document.getElementById('modalExeDownloadBtn');
+
+    let currentExportTarget = 'web'; // 'web' | 'apk' | 'exe'
+    let lastDeployedSiteId = null;
+    let apkQrcodeInstance = null;
 
     // Clerk Auth & User Sites Elements
     const headerSignInBtn = document.getElementById('headerSignInBtn');
@@ -181,6 +209,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (publicDomainConfig.announcements) {
                     initAnnouncementSystem(publicDomainConfig.announcements);
                 }
+
+                // Initialize Customer Service System
+                initCustomerService(publicDomainConfig.contact);
             }
         } catch (e) {
             console.error('Failed to load public config:', e);
@@ -417,6 +448,47 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // ---- Target Selector (Web / APK / EXE) ----
+    if (targetTabs && targetTabs.length) {
+        targetTabs.forEach((tab, index) => {
+            tab.addEventListener('click', () => {
+                targetTabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+
+                const targetType = tab.getAttribute('data-target-type') || 'web';
+                currentExportTarget = targetType;
+
+                const targetIndicator = targetSegmentedControl ? targetSegmentedControl.querySelector('.tab-indicator') : null;
+                if (targetIndicator) {
+                    targetIndicator.style.transform = `translateX(${index * 100}%)`;
+                }
+
+                if (targetType === 'web') {
+                    if (appNameGroup) appNameGroup.classList.add('hidden');
+                    if (customPathGroup) customPathGroup.classList.remove('hidden');
+                    if (deployBtnText) {
+                        deployBtnText.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -3px; margin-right: 6px;"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>立即生成链接`;
+                    }
+                    if (deployBtnLoaderText) deployBtnLoaderText.textContent = '部署中...';
+                } else if (targetType === 'apk') {
+                    if (appNameGroup) appNameGroup.classList.remove('hidden');
+                    if (customPathGroup) customPathGroup.classList.add('hidden');
+                    if (deployBtnText) {
+                        deployBtnText.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -3px; margin-right: 6px;"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>立即打包安卓 APK`;
+                    }
+                    if (deployBtnLoaderText) deployBtnLoaderText.textContent = '正在构建 APK...';
+                } else if (targetType === 'exe') {
+                    if (appNameGroup) appNameGroup.classList.remove('hidden');
+                    if (customPathGroup) customPathGroup.classList.add('hidden');
+                    if (deployBtnText) {
+                        deployBtnText.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -3px; margin-right: 6px;"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>立即打包电脑 EXE`;
+                    }
+                    if (deployBtnLoaderText) deployBtnLoaderText.textContent = '正在构建 EXE...';
+                }
+            });
+        });
+    }
+
     // ---- File Upload Handling ----
     function handleFileDrop(e, type) {
         e.preventDefault();
@@ -474,11 +546,79 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     codeTextarea.addEventListener('input', updateCharCount);
 
-    // ---- Deployment Flow (Real API) ----
+    // ---- Packaging & Deployment Flow (Real API) ----
+    async function handlePackageApp(target) {
+        const cdkey = cdkeyInput.value.trim();
+        const appName = (appNameInput ? appNameInput.value.trim() : '') || '我的网页应用';
+
+        const formData = new FormData();
+        formData.append('cdkey', cdkey);
+        formData.append('target', target);
+        formData.append('appName', appName);
+
+        if (currentUploadMode === 'html') {
+            if (!selectedFile) return showToast('请先选择 HTML 文件', 'error');
+            formData.append('type', 'html');
+            formData.append('file', selectedFile);
+        } else if (currentUploadMode === 'zip') {
+            if (!selectedFile) return showToast('请先选择 ZIP 文件', 'error');
+            formData.append('type', 'zip');
+            formData.append('file', selectedFile);
+        } else {
+            const code = codeTextarea.value.trim();
+            if (!code) return showToast('请先粘贴 HTML 代码', 'error');
+            if (!code.includes('<html') && !code.includes('<body') && !code.includes('<div') && !code.includes('<!DOCTYPE') && !code.includes('<!doctype')) {
+                return showToast('代码格式似乎不正确，请检查是否包含有效的 HTML 标签', 'error');
+            }
+            formData.append('type', 'code');
+            formData.append('htmlCode', code);
+        }
+
+        deployBtn.disabled = true;
+        deployBtn.querySelector('.btn-text').classList.add('hidden');
+        deployBtn.querySelector('.btn-loader').classList.remove('hidden');
+
+        try {
+            let headers = {};
+            if (clerkInstance && clerkInstance.session) {
+                try {
+                    const token = await clerkInstance.session.getToken();
+                    if (token) headers['Authorization'] = `Bearer ${token}`;
+                } catch (tokErr) {}
+            }
+
+            const { resp: response, data } = await safeFetchJson('/api/package/build', {
+                method: 'POST',
+                headers,
+                body: formData
+            });
+
+            if (response.status === 401) {
+                showToast(data.message || '请先登录账号后再操作', 'error');
+                if (clerkInstance && clerkInstance.openSignIn) clerkInstance.openSignIn();
+                return;
+            }
+
+            if (!response.ok || !data.success) {
+                throw new Error(data.message || '客户端打包失败，请稍后重试');
+            }
+
+            openPackageResultModal(data.data, target);
+            showToast(`${target === 'apk' ? 'Android APK' : 'Windows EXE'} 打包成功！`, 'success');
+
+        } catch (error) {
+            showToast(error.message || '打包发生异常，请检查文件后重试', 'error');
+        } finally {
+            deployBtn.disabled = false;
+            deployBtn.querySelector('.btn-text').classList.remove('hidden');
+            deployBtn.querySelector('.btn-loader').classList.add('hidden');
+        }
+    }
+
     deployBtn.addEventListener('click', async () => {
         // 0. Enforce Login (No Guest Mode)
         if (!clerkInstance || !clerkInstance.isSignedIn) {
-            showToast('请先注册或登录账号后再生成链接', 'error');
+            showToast('请先注册或登录账号后再操作', 'error');
             if (clerkInstance && clerkInstance.openSignIn) {
                 clerkInstance.openSignIn();
             } else if (headerSignInBtn) {
@@ -491,6 +631,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!cdkey) {
             showToast('请输入卡密', 'error');
             cdkeyInput.focus();
+            return;
+        }
+
+        // Route to APK / EXE packaging if target is selected
+        if (currentExportTarget === 'apk' || currentExportTarget === 'exe') {
+            await handlePackageApp(currentExportTarget);
             return;
         }
         
@@ -584,6 +730,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         resultLink.value = url;
         previewExternalLink.href = url;
+        lastDeployedSiteId = (deployData && (deployData.siteId || deployData.subdomain)) || null;
         
         qrcodeContainer.innerHTML = '';
         if (typeof QRCode !== 'undefined') {
@@ -601,6 +748,127 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast(`网页部署成功！${fileInfo}`, 'success');
         
         resultSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // ---- Package Result Modal & Quick Export Logic ----
+    function openPackageResultModal(data, target) {
+        if (!packageResultModal) return;
+
+        const targetData = target === 'apk' ? (data.apk || data) : (data.exe || data);
+        const downloadUrl = targetData.downloadUrl || targetData.url || '';
+        const fullDownloadUrl = targetData.fullDownloadUrl || (window.location.origin + downloadUrl);
+        const appName = data.appName || '我的网页应用';
+        const filename = targetData.fileName || targetData.filename || '';
+        const sizeBytes = targetData.size || targetData.fileSize || 0;
+        const sizeStr = sizeBytes ? formatFileSize(sizeBytes) : '';
+
+        if (modalPackageAppName) modalPackageAppName.textContent = appName;
+        if (modalPackageFileInfo) {
+            modalPackageFileInfo.textContent = `${target === 'apk' ? 'Android 安装包' : 'Windows 单文件程序'} · ${sizeStr}`;
+        }
+
+        if (target === 'apk') {
+            if (modalPackageTitle) modalPackageTitle.textContent = 'Android APK 打包完成';
+            if (modalPackageIconWrap) modalPackageIconWrap.innerHTML = '📱';
+            if (modalApkSection) modalApkSection.classList.remove('hidden');
+            if (modalExeSection) modalExeSection.classList.add('hidden');
+            if (modalApkDownloadBtn) {
+                modalApkDownloadBtn.href = downloadUrl;
+                modalApkDownloadBtn.setAttribute('download', filename);
+            }
+
+            if (modalApkQrcodeContainer) {
+                modalApkQrcodeContainer.innerHTML = '';
+                if (typeof QRCode !== 'undefined') {
+                    apkQrcodeInstance = new QRCode(modalApkQrcodeContainer, {
+                        text: fullDownloadUrl,
+                        width: 170,
+                        height: 170,
+                        colorDark: '#0f172a',
+                        colorLight: '#ffffff',
+                        correctLevel: QRCode.CorrectLevel.M
+                    });
+                }
+            }
+        } else {
+            if (modalPackageTitle) modalPackageTitle.textContent = 'Windows 单文件程序打包完成';
+            if (modalPackageIconWrap) modalPackageIconWrap.innerHTML = '💻';
+            if (modalApkSection) modalApkSection.classList.add('hidden');
+            if (modalExeSection) modalExeSection.classList.remove('hidden');
+            if (modalExeDownloadBtn) {
+                modalExeDownloadBtn.href = downloadUrl;
+                modalExeDownloadBtn.setAttribute('download', filename);
+            }
+        }
+
+        packageResultModal.classList.remove('hidden');
+    }
+
+    if (closePackageModalBtn && packageResultModal) {
+        closePackageModalBtn.addEventListener('click', () => {
+            packageResultModal.classList.add('hidden');
+        });
+    }
+
+    async function handleQuickExportFromSite(target, siteId) {
+        if (!siteId) {
+            showToast('未找到站点信息，无法导出', 'error');
+            return;
+        }
+
+        const targetName = target === 'apk' ? 'Android APK' : 'Windows EXE';
+        const appName = prompt(`请输入客户端应用名称（留空默认使用站点名）：`, '') || '';
+
+        const targetBtn = target === 'apk' ? quickExportApkBtn : quickExportExeBtn;
+        if (targetBtn) {
+            targetBtn.disabled = true;
+            targetBtn.style.opacity = '0.6';
+        }
+
+        showToast(`正在将网页打包为 ${targetName}，请稍候...`, 'info');
+
+        try {
+            let headers = {
+                'Content-Type': 'application/json'
+            };
+            if (clerkInstance && clerkInstance.session) {
+                try {
+                    const token = await clerkInstance.session.getToken();
+                    if (token) headers['Authorization'] = `Bearer ${token}`;
+                } catch (tErr) {}
+            }
+
+            const { resp, data } = await safeFetchJson('/api/package/from-site', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ siteId, target, appName })
+            });
+
+            if (!resp.ok || !data.success) {
+                throw new Error(data.message || '导出客户端失败');
+            }
+
+            openPackageResultModal(data.data, target);
+            showToast(`${targetName} 导出成功！`, 'success');
+        } catch (err) {
+            showToast(err.message || '导出失败，请重试', 'error');
+        } finally {
+            if (targetBtn) {
+                targetBtn.disabled = false;
+                targetBtn.style.opacity = '1';
+            }
+        }
+    }
+
+    if (quickExportApkBtn) {
+        quickExportApkBtn.addEventListener('click', () => {
+            handleQuickExportFromSite('apk', lastDeployedSiteId);
+        });
+    }
+    if (quickExportExeBtn) {
+        quickExportExeBtn.addEventListener('click', () => {
+            handleQuickExportFromSite('exe', lastDeployedSiteId);
+        });
     }
 
     // ---- Site Renewal Modal (Inside My Sites) ----
@@ -1269,6 +1537,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
                         <span>续期</span>
                     </button>
+                    <button class="btn-icon-text export-site-apk" data-id="${site.siteId}" data-name="${escapeHtml(site.subdomain || site.siteId)}" title="导出为安卓安装包">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                        <span>转 APK</span>
+                    </button>
+                    <button class="btn-icon-text export-site-exe" data-id="${site.siteId}" data-name="${escapeHtml(site.subdomain || site.siteId)}" title="导出为电脑客户端">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                        <span>转 EXE</span>
+                    </button>
                     <button class="btn-icon-text preview-site-link" data-url="${site.url}">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                         <span>预览</span>
@@ -1300,6 +1576,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 const sub = e.currentTarget.getAttribute('data-subdomain');
                 const exp = e.currentTarget.getAttribute('data-expires');
                 openRenewModal(sub, exp);
+            });
+
+            card.querySelector('.export-site-apk').addEventListener('click', (e) => {
+                const id = e.currentTarget.getAttribute('data-id');
+                handleQuickExportFromSite('apk', id);
+            });
+
+            card.querySelector('.export-site-exe').addEventListener('click', (e) => {
+                const id = e.currentTarget.getAttribute('data-id');
+                handleQuickExportFromSite('exe', id);
             });
 
             card.querySelector('.preview-site-link').addEventListener('click', (e) => {
@@ -2031,6 +2317,187 @@ document.addEventListener('DOMContentLoaded', () => {
             resetAnnouncementAutoPlay();
         }
     });
+
+    // ==========================================================================
+    // FLOATING CUSTOMER SERVICE SYSTEM (悬浮客服与联系方式)
+    // ==========================================================================
+    const csFloatingWrapper = document.getElementById('csFloatingWrapper');
+    const csPopoverCard = document.getElementById('csPopoverCard');
+    const csFloatBtn = document.getElementById('csFloatBtn');
+    const csCloseBtn = document.getElementById('csCloseBtn');
+    const csTitle = document.getElementById('csTitle');
+    const csSubtitle = document.getElementById('csSubtitle');
+    const csNotice = document.getElementById('csNotice');
+
+    const csWechatItem = document.getElementById('csWechatItem');
+    const csWechatVal = document.getElementById('csWechatVal');
+    const csCopyWechatBtn = document.getElementById('csCopyWechatBtn');
+    const csWechatQrWrap = document.getElementById('csWechatQrWrap');
+    const csWechatQrImg = document.getElementById('csWechatQrImg');
+
+    const csQqItem = document.getElementById('csQqItem');
+    const csQqVal = document.getElementById('csQqVal');
+    const csCopyQqBtn = document.getElementById('csCopyQqBtn');
+    const csDirectQqBtn = document.getElementById('csDirectQqBtn');
+
+    const csEmailItem = document.getElementById('csEmailItem');
+    const csEmailVal = document.getElementById('csEmailVal');
+    const csCopyEmailBtn = document.getElementById('csCopyEmailBtn');
+    const csSendEmailBtn = document.getElementById('csSendEmailBtn');
+
+    let currentContactConfig = null;
+
+    function copyToClipboard(text, successMsg = '已复制到剪贴板！') {
+        if (!text) return;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(() => {
+                showToast(successMsg, 'success');
+            }).catch(() => {
+                fallbackCopyText(text, successMsg);
+            });
+        } else {
+            fallbackCopyText(text, successMsg);
+        }
+    }
+
+    function fallbackCopyText(text, successMsg) {
+        const temp = document.createElement('textarea');
+        temp.value = text;
+        temp.style.position = 'fixed';
+        temp.style.opacity = '0';
+        document.body.appendChild(temp);
+        temp.select();
+        try {
+            document.execCommand('copy');
+            showToast(successMsg, 'success');
+        } catch (e) {
+            showToast('复制失败，请手动长按复制', 'error');
+        }
+        document.body.removeChild(temp);
+    }
+
+    function initCustomerService(contact) {
+        if (!csFloatingWrapper) return;
+
+        if (!contact || contact.enabled === false) {
+            csFloatingWrapper.style.display = 'none';
+            return;
+        }
+
+        currentContactConfig = contact;
+        csFloatingWrapper.style.display = 'flex';
+
+        if (csTitle && contact.title) csTitle.textContent = contact.title;
+        if (csSubtitle && contact.subtitle) csSubtitle.textContent = contact.subtitle;
+        if (csNotice && contact.notice) csNotice.textContent = contact.notice;
+
+        // WeChat
+        const hasWechat = Boolean(contact.wechat && contact.wechat.trim());
+        const hasWechatQr = Boolean(contact.wechatQr && contact.wechatQr.trim());
+        if (hasWechat || hasWechatQr) {
+            if (csWechatItem) csWechatItem.style.display = 'block';
+            if (csWechatVal) csWechatVal.textContent = hasWechat ? contact.wechat : '扫码添加微信';
+            if (csCopyWechatBtn) csCopyWechatBtn.style.display = hasWechat ? 'inline-flex' : 'none';
+            if (hasWechatQr && csWechatQrWrap && csWechatQrImg) {
+                csWechatQrImg.src = contact.wechatQr;
+                csWechatQrWrap.classList.remove('hidden');
+            } else if (csWechatQrWrap) {
+                csWechatQrWrap.classList.add('hidden');
+            }
+        } else if (csWechatItem) {
+            csWechatItem.style.display = 'none';
+        }
+
+        // QQ
+        const hasQq = Boolean(contact.qq && contact.qq.trim());
+        if (hasQq) {
+            if (csQqItem) csQqItem.style.display = 'block';
+            if (csQqVal) csQqVal.textContent = contact.qq;
+            if (csDirectQqBtn) {
+                const qqNum = contact.qq.trim();
+                const directUrl = contact.qqLink ? contact.qqLink.trim() : `https://wpa.qq.com/msgrd?v=3&uin=${qqNum}&site=qq&menu=yes`;
+                csDirectQqBtn.href = directUrl;
+            }
+        } else if (csQqItem) {
+            csQqItem.style.display = 'none';
+        }
+
+        // Email
+        const hasEmail = Boolean(contact.email && contact.email.trim());
+        if (hasEmail) {
+            if (csEmailItem) csEmailItem.style.display = 'block';
+            if (csEmailVal) csEmailVal.textContent = contact.email;
+            if (csSendEmailBtn) {
+                csSendEmailBtn.href = `mailto:${contact.email.trim()}`;
+            }
+        } else if (csEmailItem) {
+            csEmailItem.style.display = 'none';
+        }
+
+        // If all 3 channels are empty, show fallback info
+        if (!hasWechat && !hasWechatQr && !hasQq && !hasEmail) {
+            if (csWechatItem) {
+                csWechatItem.style.display = 'block';
+                if (csWechatVal) csWechatVal.textContent = '暂未配置联系方式';
+                if (csCopyWechatBtn) csCopyWechatBtn.style.display = 'none';
+            }
+        }
+    }
+
+    if (csFloatBtn && csPopoverCard) {
+        csFloatBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isHidden = csPopoverCard.classList.contains('hidden');
+            if (isHidden) {
+                csPopoverCard.classList.remove('hidden');
+            } else {
+                csPopoverCard.classList.add('hidden');
+            }
+        });
+    }
+
+    if (csCloseBtn && csPopoverCard) {
+        csCloseBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            csPopoverCard.classList.add('hidden');
+        });
+    }
+
+    // Dismiss popover when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!csPopoverCard || csPopoverCard.classList.contains('hidden')) return;
+        if (csFloatingWrapper && !csFloatingWrapper.contains(e.target)) {
+            csPopoverCard.classList.add('hidden');
+        }
+    });
+
+    // Copy actions
+    if (csCopyWechatBtn) {
+        csCopyWechatBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (currentContactConfig && currentContactConfig.wechat) {
+                copyToClipboard(currentContactConfig.wechat, '微信号已复制到剪贴板！');
+            }
+        });
+    }
+
+    if (csCopyQqBtn) {
+        csCopyQqBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (currentContactConfig && currentContactConfig.qq) {
+                copyToClipboard(currentContactConfig.qq, 'QQ 号已复制到剪贴板！');
+            }
+        });
+    }
+
+    if (csCopyEmailBtn) {
+        csCopyEmailBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (currentContactConfig && currentContactConfig.email) {
+                copyToClipboard(currentContactConfig.email, '客服邮箱已复制到剪贴板！');
+            }
+        });
+    }
 
     initAntigravityBackground();
 });

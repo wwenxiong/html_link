@@ -189,6 +189,7 @@ document.addEventListener('DOMContentLoaded', () => {
             loadClerkConfig();
             loadCdkeyBuyConfig();
             loadAnnouncementConfig();
+            loadContactConfig();
             loadHealthStatus();
         } catch (error) {
             adminPassword = '';
@@ -1665,6 +1666,186 @@ document.addEventListener('DOMContentLoaded', () => {
         previewViewport.addEventListener('mouseleave', startPreviewAutoPlay);
     }
 
+    // ==========================================================================
+    // CUSTOMER SERVICE / CONTACT INFO CONFIGURATION
+    // ==========================================================================
+    const overviewContactStatus = document.getElementById('overviewContactStatus');
+    const contactStatusPill = document.getElementById('contactStatusPill');
+    const contactEnabledInput = document.getElementById('contactEnabledInput');
+    const contactTitleInput = document.getElementById('contactTitleInput');
+    const contactSubtitleInput = document.getElementById('contactSubtitleInput');
+    const contactQqInput = document.getElementById('contactQqInput');
+    const contactQqLinkInput = document.getElementById('contactQqLinkInput');
+    const contactWechatInput = document.getElementById('contactWechatInput');
+    const contactWechatQrInput = document.getElementById('contactWechatQrInput');
+    const contactQrFileInput = document.getElementById('contactQrFileInput');
+    const uploadQrBtn = document.getElementById('uploadQrBtn');
+    const contactQrPreviewBox = document.getElementById('contactQrPreviewBox');
+    const contactQrPreviewImg = document.getElementById('contactQrPreviewImg');
+    const removeQrBtn = document.getElementById('removeQrBtn');
+    const contactEmailInput = document.getElementById('contactEmailInput');
+    const contactNoticeInput = document.getElementById('contactNoticeInput');
+    const saveContactConfigBtn = document.getElementById('saveContactConfigBtn');
+
+    function updateContactStatusUI(config) {
+        if (!overviewContactStatus) return;
+        if (!config || config.enabled === false) {
+            overviewContactStatus.innerHTML = '<span style="color: var(--text-muted); font-weight: 500;">○ 已关闭</span>';
+            if (contactStatusPill) contactStatusPill.innerHTML = '<span style="color: var(--text-muted);">已关闭</span>';
+        } else {
+            const channels = [];
+            if (config.wechat || config.wechatQr) channels.push('微信');
+            if (config.qq) channels.push('QQ');
+            if (config.email) channels.push('邮箱');
+            const channelText = channels.length > 0 ? channels.join('/') : '未填联系方式';
+            overviewContactStatus.innerHTML = `<span style="color: var(--accent-success); font-weight: 600;">● 已开启 (${channelText})</span>`;
+            if (contactStatusPill) contactStatusPill.innerHTML = '<span style="color: var(--accent-success); font-weight: 600;">● 已启用</span>';
+        }
+    }
+
+    function updateQrPreviewUI(url) {
+        if (!contactQrPreviewBox || !contactQrPreviewImg) return;
+        if (url && url.trim()) {
+            contactQrPreviewImg.src = url.trim();
+            contactQrPreviewBox.style.display = 'flex';
+        } else {
+            contactQrPreviewBox.style.display = 'none';
+            contactQrPreviewImg.src = '';
+        }
+    }
+
+    async function loadContactConfig() {
+        try {
+            const data = await safeFetchJson(`/api/admin/contact?password=${encodeURIComponent(adminPassword)}`);
+            if (data && data.success && data.data) {
+                const cfg = data.data;
+                if (contactEnabledInput) contactEnabledInput.checked = Boolean(cfg.enabled !== false);
+                if (contactTitleInput) contactTitleInput.value = cfg.title || '';
+                if (contactSubtitleInput) contactSubtitleInput.value = cfg.subtitle || '';
+                if (contactQqInput) contactQqInput.value = cfg.qq || '';
+                if (contactQqLinkInput) contactQqLinkInput.value = cfg.qqLink || '';
+                if (contactWechatInput) contactWechatInput.value = cfg.wechat || '';
+                if (contactWechatQrInput) contactWechatQrInput.value = cfg.wechatQr || '';
+                if (contactEmailInput) contactEmailInput.value = cfg.email || '';
+                if (contactNoticeInput) contactNoticeInput.value = cfg.notice || '';
+
+                updateQrPreviewUI(cfg.wechatQr);
+                updateContactStatusUI(cfg);
+            }
+        } catch (e) {
+            console.warn('Failed to load contact config:', e);
+            if (overviewContactStatus) {
+                overviewContactStatus.innerHTML = '<span style="color: var(--accent-error);">加载失败</span>';
+            }
+        }
+    }
+
+    if (contactWechatQrInput) {
+        contactWechatQrInput.addEventListener('input', () => {
+            updateQrPreviewUI(contactWechatQrInput.value.trim());
+        });
+    }
+
+    if (uploadQrBtn && contactQrFileInput) {
+        uploadQrBtn.addEventListener('click', () => {
+            contactQrFileInput.click();
+        });
+
+        contactQrFileInput.addEventListener('change', async () => {
+            const file = contactQrFileInput.files[0];
+            if (!file) return;
+
+            uploadQrBtn.disabled = true;
+            uploadQrBtn.textContent = '上传中...';
+
+            const formData = new FormData();
+            formData.append('qrImage', file);
+            formData.append('password', adminPassword);
+
+            try {
+                const res = await fetch('/api/admin/contact-upload-qr', {
+                    method: 'POST',
+                    headers: {
+                        'x-admin-password': adminPassword
+                    },
+                    body: formData
+                });
+
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    throw new Error(data.message || '上传图片失败');
+                }
+
+                if (contactWechatQrInput) {
+                    contactWechatQrInput.value = data.data.url;
+                }
+                updateQrPreviewUI(data.data.url);
+                showToast('微信二维码上传成功！', 'success');
+            } catch (err) {
+                showToast(err.message || '二维码上传失败', 'error');
+            } finally {
+                uploadQrBtn.disabled = false;
+                uploadQrBtn.textContent = '上传图片';
+                contactQrFileInput.value = '';
+            }
+        });
+    }
+
+    if (removeQrBtn) {
+        removeQrBtn.addEventListener('click', () => {
+            if (contactWechatQrInput) contactWechatQrInput.value = '';
+            updateQrPreviewUI('');
+            showToast('已清除二维码图片', 'info');
+        });
+    }
+
+    if (saveContactConfigBtn) {
+        saveContactConfigBtn.addEventListener('click', async () => {
+            const enabled = contactEnabledInput ? contactEnabledInput.checked : true;
+            const title = contactTitleInput ? contactTitleInput.value.trim() : '';
+            const subtitle = contactSubtitleInput ? contactSubtitleInput.value.trim() : '';
+            const qq = contactQqInput ? contactQqInput.value.trim() : '';
+            const qqLink = contactQqLinkInput ? contactQqLinkInput.value.trim() : '';
+            const wechat = contactWechatInput ? contactWechatInput.value.trim() : '';
+            const wechatQr = contactWechatQrInput ? contactWechatQrInput.value.trim() : '';
+            const email = contactEmailInput ? contactEmailInput.value.trim() : '';
+            const notice = contactNoticeInput ? contactNoticeInput.value.trim() : '';
+
+            saveContactConfigBtn.disabled = true;
+            saveContactConfigBtn.textContent = '保存中...';
+
+            try {
+                const data = await safeFetchJson('/api/admin/contact', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        enabled,
+                        title,
+                        subtitle,
+                        qq,
+                        qqLink,
+                        wechat,
+                        wechatQr,
+                        email,
+                        notice,
+                        password: adminPassword
+                    })
+                });
+
+                if (!data.success) {
+                    throw new Error(data.message || '保存失败');
+                }
+
+                updateContactStatusUI(data.data);
+                showToast('客服与联系方式配置已成功保存！', 'success');
+            } catch (error) {
+                showToast(error.message || '保存失败', 'error');
+            } finally {
+                saveContactConfigBtn.disabled = false;
+                saveContactConfigBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 4px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>保存客服配置';
+            }
+        });
+    }
 
     // ---- Health Status ----
     async function loadHealthStatus() {

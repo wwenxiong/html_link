@@ -479,6 +479,100 @@ code, pre, .font-mono, .code-text, .cdkey-code, .url-text, .site-url, .badge-mon
     color: var(--text-secondary);
 }
 
+/* Hero Stats / Trust Tagline Badge */
+.hero-stats-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+    padding: 6px 16px;
+    background: var(--mac-surface);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--mac-border-highlight);
+    border-radius: 999px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    font-size: 13px;
+    color: var(--text-secondary);
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    user-select: none;
+}
+
+.hero-stats-badge:hover {
+    transform: translateY(-1px);
+    border-color: rgba(94, 92, 230, 0.4);
+    box-shadow: 0 8px 24px -4px rgba(94, 92, 230, 0.25);
+    color: var(--text-primary);
+}
+
+.pulse-indicator {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 10px;
+    height: 10px;
+}
+
+.pulse-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background-color: var(--accent-success);
+    box-shadow: 0 0 8px var(--accent-success);
+}
+
+.pulse-ring {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background-color: var(--accent-success);
+    opacity: 0.75;
+    animation: pulsePing 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes pulsePing {
+    0% {
+        transform: scale(0.9);
+        opacity: 0.8;
+    }
+    70%, 100% {
+        transform: scale(2.4);
+        opacity: 0;
+    }
+}
+
+.stats-text {
+    font-weight: 500;
+    letter-spacing: -0.1px;
+}
+
+.stats-highlight {
+    font-weight: 800;
+    font-family: 'JetBrains Mono', monospace, sans-serif;
+    color: var(--mac-blue);
+    background: linear-gradient(135deg, #0a84ff 0%, #bf5af2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    padding: 0 2px;
+}
+
+.stats-separator {
+    color: var(--text-tertiary);
+    opacity: 0.6;
+}
+
+.stats-tag {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 6px;
+    background: var(--accent-success-bg);
+    color: var(--accent-success);
+    letter-spacing: 0.2px;
+}
+
 .deploy-card {
     max-width: 660px;
     margin: 0 auto 40px;
@@ -2705,4 +2799,544 @@ footer .disclaimer {
     .announcement-slide { padding: 18px 16px 14px; }
     .announcement-controls { padding: 2px 16px 10px; }
 }
+
+/* ==========================================================================
+   FLOATING CUSTOMER SERVICE WIDGET (悬浮客服与联系方式系统)
+   ========================================================================== */
+
+.cs-floating-wrapper {
+    position: fixed;
+    bottom: 28px;
+    right: 28px;
+    z-index: 1100;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+/* Floating Action Button (FAB) */
+.cs-float-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px 10px 14px;
+    height: 48px;
+    background: var(--primary-gradient);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 999px;
+    box-shadow: 0 8px 24px -4px rgba(94, 92, 230, 0.5), 0 2px 8px rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+    font-size: 13.5px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    user-select: none;
+    outline: none;
+}
+
+.cs-float-btn:hover {
+    transform: translateY(-2px) scale(1.03);
+    background: var(--primary-gradient-hover);
+    box-shadow: 0 12px 30px -4px rgba(94, 92, 230, 0.65), 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.cs-float-btn:active {
+    transform: translateY(0) scale(0.98);
+}
+
+.cs-btn-pulse {
+    position: absolute;
+    inset: -3px;
+    border-radius: 999px;
+    border: 2px solid var(--accent);
+    opacity: 0;
+    animation: csBtnPulse 3s infinite;
+    pointer-events: none;
+}
+
+@keyframes csBtnPulse {
+    0% {
+        transform: scale(0.96);
+        opacity: 0.8;
+    }
+    50% {
+        transform: scale(1.12);
+        opacity: 0;
+    }
+    100% {
+        transform: scale(1.12);
+        opacity: 0;
+    }
+}
+
+.cs-btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cs-btn-label {
+    white-space: nowrap;
+}
+
+.cs-unread-dot {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #ff3b30;
+    border: 2px solid #ffffff;
+    display: none;
+}
+
+.cs-unread-dot.active {
+    display: block;
+}
+
+/* Popover Card */
+.cs-popover-card {
+    position: absolute;
+    bottom: calc(100% + 14px);
+    right: 0;
+    width: 340px;
+    max-width: calc(100vw - 36px);
+    background: var(--mac-card-bg);
+    backdrop-filter: blur(28px) saturate(190%);
+    -webkit-backdrop-filter: blur(28px) saturate(190%);
+    border: 1px solid var(--mac-border-highlight);
+    border-radius: 18px;
+    box-shadow: var(--mac-shadow-popover);
+    padding: 16px;
+    transform-origin: bottom right;
+    transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+                transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+                visibility 0.25s;
+    visibility: visible;
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+.cs-popover-card.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(10px) scale(0.96);
+    display: block !important; /* overridden to allow smooth animation */
+}
+
+/* Card Header */
+.cs-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding-bottom: 12px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--mac-border-subtle);
+}
+
+.cs-header-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.cs-avatar-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: var(--primary-gradient);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    box-shadow: 0 4px 12px rgba(94, 92, 230, 0.3);
+}
+
+.cs-header-title-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 2px;
+}
+
+.cs-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+    letter-spacing: -0.2px;
+}
+
+.cs-online-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: var(--accent-success-bg);
+    color: var(--accent-success);
+}
+
+.cs-online-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--accent-success);
+    box-shadow: 0 0 4px var(--accent-success);
+}
+
+.cs-subtitle {
+    font-size: 11.5px;
+    color: var(--text-secondary);
+    margin: 0;
+    line-height: 1.3;
+}
+
+.cs-close-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-tertiary);
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    line-height: 1;
+}
+
+.cs-close-btn:hover {
+    background: var(--mac-control-bg);
+    color: var(--text-primary);
+}
+
+/* Channels Container */
+.cs-channels-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.cs-channel-item {
+    background: var(--mac-surface);
+    border: 1px solid var(--mac-border-subtle);
+    border-radius: 12px;
+    padding: 10px 12px;
+    transition: border-color 0.2s, background-color 0.2s, box-shadow 0.2s;
+}
+
+.cs-channel-item:hover {
+    background: var(--mac-surface-hover);
+    border-color: var(--mac-border-highlight);
+}
+
+.cs-channel-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.cs-channel-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.cs-channel-icon.wechat-icon {
+    background: rgba(7, 193, 96, 0.15);
+    color: #07c160;
+}
+
+.cs-channel-icon.qq-icon {
+    background: rgba(18, 150, 219, 0.15);
+    color: #1296db;
+}
+
+.cs-channel-icon.email-icon {
+    background: rgba(94, 92, 230, 0.15);
+    color: var(--mac-indigo);
+}
+
+.cs-channel-meta {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+}
+
+.cs-channel-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    line-height: 1.3;
+}
+
+.cs-channel-val {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace, sans-serif;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cs-btn-group {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.cs-action-btn {
+    height: 28px;
+    padding: 0 8px;
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 600;
+    border: 1px solid var(--mac-border);
+    background: var(--mac-control-bg);
+    color: var(--text-primary);
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    box-sizing: border-box;
+    white-space: nowrap;
+}
+
+.cs-btn-group button.cs-action-btn,
+.cs-btn-group a.cs-action-btn {
+    min-width: 44px;
+    text-align: center;
+}
+
+.cs-btn-group .cs-action-primary {
+    min-width: 66px;
+}
+
+.cs-action-btn:hover {
+    background: var(--mac-surface-active);
+    border-color: var(--mac-border-highlight);
+}
+
+.cs-action-btn.cs-action-primary {
+    background: var(--primary-gradient);
+    border-color: transparent;
+    color: #ffffff;
+}
+
+.cs-action-btn.cs-action-primary:hover {
+    background: var(--primary-gradient-hover);
+    box-shadow: 0 2px 8px rgba(94, 92, 230, 0.4);
+}
+
+/* WeChat QR Code Preview */
+.cs-qrcode-wrap {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--mac-border-subtle);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.cs-qrcode-img {
+    width: 120px;
+    height: 120px;
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 5px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    border: 1px solid var(--mac-border);
+}
+
+.cs-qrcode-tip {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    margin-top: 6px;
+}
+
+/* Card Footer */
+.cs-card-footer {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--mac-border-subtle);
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.cs-footer-clock {
+    display: inline-flex;
+    align-items: center;
+    color: var(--mac-blue);
+    flex-shrink: 0;
+}
+
+.cs-footer-notice {
+    line-height: 1.3;
+}
+
+/* Mobile Responsive */
+@media (max-width: 600px) {
+    .cs-floating-wrapper {
+        bottom: 20px;
+        right: 18px;
+    }
+
+    .cs-float-btn {
+        height: 44px;
+        padding: 8px 14px 8px 12px;
+        font-size: 13px;
+    }
+
+    .cs-popover-card {
+        width: 310px;
+        max-width: calc(100vw - 36px);
+        right: 0;
+        bottom: calc(100% + 10px);
+    }
+}
+
+/* ==========================================================================
+   EXPORT TARGET SELECTOR & CLIENT APP PACKAGING
+   ========================================================================== */
+
+.export-target-group {
+    margin-bottom: 16px;
+}
+
+.form-label-inline {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.target-segmented-control {
+    margin-bottom: 0 !important;
+}
+
+.app-name-group {
+    margin-bottom: 16px;
+}
+
+.package-quick-export-box {
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid var(--mac-border-subtle);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+}
+
+.package-export-title {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.package-export-btns {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+}
+
+.btn-package-quick {
+    flex: 1;
+    padding: 8px 12px;
+    font-size: 12.5px;
+    font-weight: 600;
+    border-radius: 8px;
+    border: 1px solid var(--mac-border);
+    background: var(--mac-surface);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.btn-package-quick:hover {
+    background: var(--mac-surface-hover);
+    border-color: var(--mac-border-highlight);
+    transform: translateY(-1px);
+}
+
+.package-success-badge {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--mac-surface);
+    border: 1px solid var(--mac-border-subtle);
+    border-radius: 12px;
+    padding: 12px 16px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.package-icon-wrap {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: var(--primary-gradient);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+    box-shadow: 0 4px 12px rgba(94, 92, 230, 0.3);
+}
+
+.package-meta-info {
+    flex: 1;
+    text-align: left;
+    min-width: 0;
+}
+
+.package-meta-info h4 {
+    margin: 0 0 4px 0;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.package-file-info {
+    font-size: 11.5px;
+    color: var(--text-secondary);
+}
+
 

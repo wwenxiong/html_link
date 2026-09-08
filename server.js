@@ -31,6 +31,36 @@ const LOCAL_SITES_DIR = path.join(__dirname, 'public', '_sites');
 // Ensure storage directories exist
 if (!fs.existsSync(LOCAL_SITES_DIR)) fs.mkdirSync(LOCAL_SITES_DIR, { recursive: true });
 
+const UPLOADS_DIR = path.join(__dirname, 'public', 'uploads');
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
+const PACKAGES_DIR = path.join(__dirname, 'public', 'downloads', 'packages');
+if (!fs.existsSync(PACKAGES_DIR)) fs.mkdirSync(PACKAGES_DIR, { recursive: true });
+
+const packager = require('./lib/packager');
+
+// Clean packages older than 24h
+function cleanOldPackages() {
+  try {
+    const now = Date.now();
+    const maxAge = 24 * 60 * 60 * 1000;
+    if (fs.existsSync(PACKAGES_DIR)) {
+      const files = fs.readdirSync(PACKAGES_DIR);
+      for (const file of files) {
+        const filePath = path.join(PACKAGES_DIR, file);
+        const stat = fs.statSync(filePath);
+        if (now - stat.mtimeMs > maxAge) {
+          fs.unlinkSync(filePath);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[Packager] Error cleaning old packages:', e.message);
+  }
+}
+cleanOldPackages();
+setInterval(cleanOldPackages, 60 * 60 * 1000);
+
 const ENV_FILE = path.join(__dirname, '.env');
 
 // Synchronize updates to .env file
@@ -145,6 +175,34 @@ function getAnnouncementsConfig() {
   };
 }
 
+// Customer Service / Contact Configuration Helper
+function getContactConfig() {
+  const raw = db.config.get('contact_config', null);
+  if (!raw || typeof raw !== 'object') {
+    return {
+      enabled: true,
+      title: '联系客服与技术支持',
+      subtitle: '遇到部署疑问、卡密咨询或需要帮助？随时联系我们',
+      qq: '',
+      qqLink: '',
+      wechat: '',
+      wechatQr: '',
+      email: '',
+      notice: '工作时间：每天 09:00 - 23:00 快速响应'
+    };
+  }
+  return {
+    enabled: raw.enabled !== undefined ? Boolean(raw.enabled) : true,
+    title: (raw.title || '联系客服与技术支持').trim(),
+    subtitle: (raw.subtitle || '遇到部署疑问、卡密咨询或需要帮助？随时联系我们').trim(),
+    qq: (raw.qq || '').trim(),
+    qqLink: (raw.qqLink || '').trim(),
+    wechat: (raw.wechat || '').trim(),
+    wechatQr: (raw.wechatQr || '').trim(),
+    email: (raw.email || '').trim(),
+    notice: (raw.notice !== undefined ? raw.notice : '工作时间：每天 09:00 - 23:00 快速响应').trim()
+  };
+}
 
 async function safeGetAuth(req) {
   try {
@@ -293,6 +351,7 @@ app.use((req, res, next) => {
     p.startsWith('/css/') ||
     p.startsWith('/js/') ||
     p.startsWith('/_sites/') ||
+    p.startsWith('/downloads/') ||
     p.startsWith('/favicon') ||
     p.endsWith('.css') ||
     p.endsWith('.js') ||
@@ -300,7 +359,9 @@ app.use((req, res, next) => {
     p.endsWith('.png') ||
     p.endsWith('.ico') ||
     p.endsWith('.jpg') ||
-    p.endsWith('.woff2')
+    p.endsWith('.woff2') ||
+    p.endsWith('.apk') ||
+    p.endsWith('.exe')
   ) {
     return next();
   }
@@ -908,6 +969,7 @@ app.get('/api/public-config', (req, res) => {
   const { publishableKey } = getClerkConfig();
   const { cdkeyBuyUrl, cdkeyBuyText } = getCdkeyBuyConfig();
   const announcements = getAnnouncementsConfig();
+  const contact = getContactConfig();
   return res.json({
     success: true,
     data: {
@@ -917,7 +979,8 @@ app.get('/api/public-config', (req, res) => {
       clerkPublishableKey: isClerkConfigured() ? publishableKey : '',
       cdkeyBuyUrl,
       cdkeyBuyText,
-      announcements
+      announcements,
+      contact
     }
   });
 });
@@ -927,6 +990,14 @@ app.get('/api/announcements', (req, res) => {
   return res.json({
     success: true,
     data: getAnnouncementsConfig()
+  });
+});
+
+// --- Public Contact Endpoint ---
+app.get('/api/contact', (req, res) => {
+  return res.json({
+    success: true,
+    data: getContactConfig()
   });
 });
 
@@ -1461,6 +1532,231 @@ app.post('/api/renew', async (req, res) => {
   } catch (err) {
     console.error('Renew error:', err);
     return res.status(500).json({ success: false, message: '服务器内部错误', error: err.message });
+  }
+});
+
+// ==================== Client Application Packaging (APK & EXE) ====================
+
+// Build APK / EXE from uploaded file or code
+app.post('/api/package/build', upload.single('file'), async (req, res) => {
+  try {
+    const auth = await safeGetAuth(req);
+    if (!auth || !auth.userId) {
+      return res.status(401).json({
+        success: false,
+        message: '请先注册或登录账号后再打包客户端应用'
+      });
+    }
+
+    const { cdkey, appName: rawAppName, target = 'both', format = 'zip', htmlCode } = req.body || {};
+
+    if (!cdkey || !cdkey.trim()) {
+      return res.status(400).json({ success: false, message: '请输入卡密 (CDKEY)' });
+    }
+
+    const keyValidation = validateCDKey(cdkey.trim());
+    if (!keyValidation || !keyValidation.valid) {
+      return res.status(400).json({
+        success: false,
+        message: (keyValidation && keyValidation.message) || '卡密无效或已过有效期'
+      });
+    }
+
+    let files;
+    try {
+      files = packager.normalizeWebFiles({ file: req.file, htmlCode });
+    } catch (err) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+
+    const appName = (rawAppName || '').trim() || '网页应用';
+    const safeName = appName.replace(/[\\/:*?"<>|]/g, '_').trim() || 'WebApp';
+    const pkgId = Date.now().toString(36) + '_' + crypto.randomBytes(3).toString('hex');
+
+    const result = { appName, target };
+
+    // Build APK
+    if (target === 'apk' || target === 'both') {
+      const apkBuffer = packager.buildApk({ files, appName });
+      const apkFileName = `${safeName}_${pkgId}.apk`;
+      const displayApkName = `${safeName}.apk`;
+      const apkFilePath = path.join(PACKAGES_DIR, apkFileName);
+      fs.writeFileSync(apkFilePath, apkBuffer);
+      result.apk = {
+        url: `/downloads/packages/${encodeURIComponent(apkFileName)}`,
+        downloadUrl: `/api/package/download/${encodeURIComponent(apkFileName)}?name=${encodeURIComponent(displayApkName)}`,
+        fileName: displayApkName,
+        size: apkBuffer.length
+      };
+    }
+
+    // Build EXE (Always standalone single .exe file)
+    if (target === 'exe' || target === 'both') {
+      const exeBuffer = packager.buildExe({ files, appName, format: 'exe' });
+      const exeFileName = `${safeName}_${pkgId}.exe`;
+      const displayExeName = `${safeName}.exe`;
+      const exeFilePath = path.join(PACKAGES_DIR, exeFileName);
+      fs.writeFileSync(exeFilePath, exeBuffer);
+      result.exe = {
+        url: `/downloads/packages/${encodeURIComponent(exeFileName)}`,
+        downloadUrl: `/api/package/download/${encodeURIComponent(exeFileName)}?name=${encodeURIComponent(displayExeName)}`,
+        fileName: displayExeName,
+        size: exeBuffer.length,
+        format: 'exe'
+      };
+    }
+
+    try {
+      consumeCDKey(cdkey.trim(), 'pkg_' + pkgId, auth.userId, auth.userEmail);
+    } catch (consumeErr) {
+      console.warn('Failed to record CDKEY consumption for package:', consumeErr);
+    }
+
+    return res.json({
+      success: true,
+      message: '客户端应用打包成功！',
+      data: result
+    });
+  } catch (err) {
+    console.error('Package build error:', err);
+    return res.status(500).json({ success: false, message: '打包失败: ' + err.message });
+  }
+});
+
+// Build APK / EXE from existing deployed site
+app.post('/api/package/from-site', async (req, res) => {
+  try {
+    const auth = await safeGetAuth(req);
+    if (!auth || !auth.userId) {
+      return res.status(401).json({ success: false, message: '请先登录账号' });
+    }
+
+    const { siteId, target = 'both', format = 'zip', appName: userAppName } = req.body || {};
+    if (!siteId) {
+      return res.status(400).json({ success: false, message: '缺少站点 ID' });
+    }
+
+    const site = db.sites.findByDomainOrId(siteId);
+    if (!site) {
+      return res.status(404).json({ success: false, message: '未找到指定站点' });
+    }
+
+    // Read files
+    const siteDir = path.join(LOCAL_SITES_DIR, 'sites', site.siteId);
+    let files = [];
+
+    if (fs.existsSync(siteDir)) {
+      function readDirRecursive(dir, base = '') {
+        const items = fs.readdirSync(dir);
+        for (const item of items) {
+          const fullPath = path.join(dir, item);
+          const relPath = base ? `${base}/${item}` : item;
+          if (fs.statSync(fullPath).isDirectory()) {
+            readDirRecursive(fullPath, relPath);
+          } else {
+            files.push({ path: relPath, buffer: fs.readFileSync(fullPath) });
+          }
+        }
+      }
+      readDirRecursive(siteDir);
+    } else if (isR2Configured()) {
+      const cfg = getR2Config();
+      const client = createS3Client();
+      const prefix = `sites/${site.siteId}/`;
+      const listRes = await client.send(new ListObjectsV2Command({ Bucket: cfg.bucketName, Prefix: prefix }));
+      for (const obj of (listRes.Contents || [])) {
+        const getRes = await client.send(new GetObjectCommand({ Bucket: cfg.bucketName, Key: obj.Key }));
+        const chunks = [];
+        for await (const chunk of getRes.Body) chunks.push(chunk);
+        const relPath = obj.Key.substring(prefix.length);
+        files.push({ path: relPath, buffer: Buffer.concat(chunks) });
+      }
+    }
+
+    if (files.length === 0) {
+      return res.status(400).json({ success: false, message: '站点文件为空或未在本地/云端存储找到' });
+    }
+
+    const appName = (userAppName || '').trim() || site.subdomain || site.siteId || '网页应用';
+    const safeName = appName.replace(/[\\/:*?"<>|]/g, '_').trim() || 'WebApp';
+    const pkgId = Date.now().toString(36) + '_' + crypto.randomBytes(3).toString('hex');
+    const siteUrl = buildSiteUrl(site.subdomain, site.siteId);
+
+    const result = { appName, target, siteId: site.siteId };
+
+    if (target === 'apk' || target === 'both') {
+      const apkBuffer = packager.buildApk({ files, appName, appUrl: siteUrl });
+      const apkFileName = `${safeName}_${pkgId}.apk`;
+      const displayApkName = `${safeName}.apk`;
+      fs.writeFileSync(path.join(PACKAGES_DIR, apkFileName), apkBuffer);
+      result.apk = {
+        url: `/downloads/packages/${encodeURIComponent(apkFileName)}`,
+        downloadUrl: `/api/package/download/${encodeURIComponent(apkFileName)}?name=${encodeURIComponent(displayApkName)}`,
+        fileName: displayApkName,
+        size: apkBuffer.length
+      };
+    }
+
+    if (target === 'exe' || target === 'both') {
+      const exeBuffer = packager.buildExe({ files, appName, appUrl: siteUrl, format: 'exe' });
+      const exeFileName = `${safeName}_${pkgId}.exe`;
+      const displayExeName = `${safeName}.exe`;
+      fs.writeFileSync(path.join(PACKAGES_DIR, exeFileName), exeBuffer);
+      result.exe = {
+        url: `/downloads/packages/${encodeURIComponent(exeFileName)}`,
+        downloadUrl: `/api/package/download/${encodeURIComponent(exeFileName)}?name=${encodeURIComponent(displayExeName)}`,
+        fileName: displayExeName,
+        size: exeBuffer.length,
+        format: 'exe'
+      };
+    }
+
+    return res.json({
+      success: true,
+      message: '客户端打包成功！',
+      data: result
+    });
+  } catch (err) {
+    console.error('Package from site error:', err);
+    return res.status(500).json({ success: false, message: '打包失败: ' + err.message });
+  }
+});
+
+// Download package with attachment header (supports custom filename via ?name=)
+app.get('/api/package/download/:filename', (req, res) => {
+  try {
+    const rawFilename = req.params.filename;
+    const safeFilename = path.basename(rawFilename);
+    const filePath = path.join(PACKAGES_DIR, safeFilename);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).send('下载文件不存在或已过期，请重新打包生成');
+    }
+
+    const customName = req.query.name;
+    const ext = path.extname(safeFilename);
+    let downloadName = safeFilename;
+    if (customName && typeof customName === 'string') {
+      const cleanCustomName = path.basename(customName).replace(/[\\/:*?"<>|]/g, '_').trim();
+      if (cleanCustomName) {
+        downloadName = cleanCustomName.toLowerCase().endsWith(ext.toLowerCase()) ? cleanCustomName : `${cleanCustomName}${ext}`;
+      }
+    }
+
+    // Use octet-stream instead of x-msdos-program to prevent browser heuristic download blocking
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    const safeAsciiName = downloadName.replace(/[^\x20-\x7E]/g, '_');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeAsciiName}"; filename*=UTF-8''${encodeURIComponent(downloadName)}`);
+
+    const stat = fs.statSync(filePath);
+    res.setHeader('Content-Length', stat.size);
+
+    const fileStream = fs.createReadStream(filePath);
+    return fileStream.pipe(res);
+  } catch (err) {
+    console.error('Download package error:', err);
+    return res.status(500).send('下载异常: ' + err.message);
   }
 });
 
@@ -2034,6 +2330,83 @@ app.post('/api/admin/announcements', (req, res) => {
     message: `公告配置已保存并发布！共 ${cleanItems.length} 条公告。`,
     data: newConfig
   });
+});
+
+// --- Admin: Get Contact Config ---
+app.get('/api/admin/contact', (req, res) => {
+  const { password } = req.query;
+
+  if (password !== ADMIN_PASSWORD) {
+    return res.status(403).json({ success: false, message: '管理员密码错误' });
+  }
+
+  return res.json({ success: true, data: getContactConfig() });
+});
+
+// --- Admin: Save Contact Config ---
+app.post('/api/admin/contact', (req, res) => {
+  const { enabled, title, subtitle, qq, qqLink, wechat, wechatQr, email, notice, password } = req.body || {};
+
+  if (password !== ADMIN_PASSWORD) {
+    return res.status(403).json({ success: false, message: '管理员密码错误' });
+  }
+
+  const isEnabled = enabled !== undefined ? Boolean(enabled) : true;
+  const newConfig = {
+    enabled: isEnabled,
+    title: (title || '联系客服与技术支持').trim(),
+    subtitle: (subtitle || '遇到部署疑问、卡密咨询或需要帮助？随时联系我们').trim(),
+    qq: (qq || '').trim(),
+    qqLink: (qqLink || '').trim(),
+    wechat: (wechat || '').trim(),
+    wechatQr: (wechatQr || '').trim(),
+    email: (email || '').trim(),
+    notice: (notice !== undefined ? notice : '工作时间：每天 09:00 - 23:00 快速响应').trim()
+  };
+
+  db.config.set('contact_config', newConfig);
+
+  return res.json({
+    success: true,
+    message: '客服与联系方式配置已保存！',
+    data: newConfig
+  });
+});
+
+// --- Admin: Upload WeChat QR Code Image ---
+app.post('/api/admin/contact-upload-qr', upload.single('qrImage'), (req, res) => {
+  const password = req.headers['x-admin-password'] || (req.body && req.body.password);
+
+  if (password !== ADMIN_PASSWORD) {
+    return res.status(403).json({ success: false, message: '管理员密码错误' });
+  }
+
+  if (!req.file) {
+    return res.status(400).json({ success: false, message: '请选择要上传的二维码图片' });
+  }
+
+  const allowedMime = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml'];
+  if (!allowedMime.includes(req.file.mimetype)) {
+    return res.status(400).json({ success: false, message: '仅支持 PNG/JPEG/WEBP/GIF/SVG 图片格式' });
+  }
+
+  try {
+    const ext = path.extname(req.file.originalname).toLowerCase() || '.png';
+    const filename = `wechat_qr_${Date.now()}${ext}`;
+    const targetPath = path.join(UPLOADS_DIR, filename);
+
+    fs.writeFileSync(targetPath, req.file.buffer);
+
+    const imageUrl = `/uploads/${filename}`;
+    return res.json({
+      success: true,
+      message: '微信二维码图片上传成功！',
+      data: { url: imageUrl }
+    });
+  } catch (err) {
+    console.error('QR upload error:', err);
+    return res.status(500).json({ success: false, message: '上传失败: ' + err.message });
+  }
 });
 
 

@@ -91,6 +91,13 @@
         <section class="hero">
             <h2 class="hero-title">上传网页，秒生链接</h2>
             <p class="hero-subtitle">不用服务器 · 不用懂代码 · 不用配环境</p>
+            <div class="hero-stats-badge">
+                <span class="pulse-indicator">
+                    <span class="pulse-dot"></span>
+                    <span class="pulse-ring"></span>
+                </span>
+                <span class="stats-text">已累计稳定托管 <strong class="stats-highlight">1000+</strong> 网页作品</span>
+            </div>
         </section>
 
         <!-- Main Deployment Card -->
@@ -149,11 +156,37 @@
                         <span id="cdkeyBuyText">获取卡密</span>
                     </a>
                 </div>
-                <p class="input-hint">提示：卡密在有效期内可<b>无限次生成链接</b>；首次使用自动激活有效期计时</p>
+            </div>
+
+            <!-- Target Mode Selector (网页链接 / APK / EXE) -->
+            <div class="form-group export-target-group">
+                <label class="form-label-inline">生成目标：</label>
+                <div class="mac-segmented-control target-segmented-control" id="targetSegmentedControl">
+                    <div class="tab active" data-target-type="web">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                        网页链接
+                    </div>
+                    <div class="tab" data-target-type="apk">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                        安卓 APK
+                    </div>
+                    <div class="tab" data-target-type="exe">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                        电脑 EXE
+                    </div>
+                    <div class="tab-indicator"></div>
+                </div>
+            </div>
+
+            <!-- App Name Input (shown when APK or EXE is selected) -->
+            <div class="form-group app-name-group hidden" id="appNameGroup">
+                <div class="input-wrapper">
+                    <input type="text" id="appNameInput" placeholder="输入客户端应用名称（默认：我的网页应用）" maxlength="30">
+                </div>
             </div>
 
             <!-- Custom Domain Input -->
-            <div class="form-group custom-path-group">
+            <div class="form-group custom-path-group" id="customPathGroup">
                 <div class="input-wrapper">
                     <input type="text" id="customPathInput" placeholder="输入自定义前缀（如：my-site）" autocomplete="off" spellcheck="false">
                     <span class="domain-suffix-tag" id="domainSuffixTag"></span>
@@ -175,10 +208,10 @@
                 </p>
             </div>
 
-            <!-- Deploy Button -->
+            <!-- Deploy / Package Button -->
             <button class="btn btn-primary btn-large btn-glow" id="deployBtn">
-                <span class="btn-text"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -3px; margin-right: 6px;"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>立即生成链接</span>
-                <span class="btn-loader hidden"><svg class="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg><span>部署中...</span></span>
+                <span class="btn-text" id="deployBtnText"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -3px; margin-right: 6px;"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>立即生成链接</span>
+                <span class="btn-loader hidden"><svg class="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg><span id="deployBtnLoaderText">部署中...</span></span>
             </button>
         </section>
 
@@ -206,6 +239,21 @@
                 <div class="result-actions">
                     <button class="btn btn-primary" id="previewBtn">预览网页</button>
                     <button class="btn btn-outline" id="newDeployBtn">部署新网页</button>
+                </div>
+
+                <!-- One-click convert to APK / EXE from deployed site -->
+                <div class="package-quick-export-box">
+                    <span class="package-export-title">📦 一键转为原生客户端应用：</span>
+                    <div class="package-export-btns">
+                        <button class="btn-package-quick" id="quickExportApkBtn" type="button" title="将当前网页打包为 Android APK 安装包">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                            <span>生成安卓 APK</span>
+                        </button>
+                        <button class="btn-package-quick" id="quickExportExeBtn" type="button" title="将当前网页打包为 Windows 桌面客户端">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                            <span>生成电脑 EXE</span>
+                        </button>
+                    </div>
                 </div>
             </div>
         </section>
@@ -487,6 +535,60 @@
         </div>
     </div>
 
+    <!-- Package Result Modal (APK & EXE 下载与扫码) -->
+    <div class="modal-overlay hidden" id="packageResultModal" style="z-index: 1100;">
+        <div class="modal-container glass-panel" style="max-width: 440px; text-align: center;">
+            <div class="modal-header" style="justify-content: space-between;">
+                <div class="modal-title-wrap">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                    <h3 id="modalPackageTitle">应用客户端打包完成</h3>
+                </div>
+                <button class="btn-close" id="closePackageModalBtn">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 20px 20px 24px; display: flex; flex-direction: column; align-items: center;">
+                <div class="package-success-badge" id="modalPackageBadge">
+                    <span class="package-icon-wrap" id="modalPackageIconWrap">📱</span>
+                    <div class="package-meta-info">
+                        <h4 id="modalPackageAppName">我的应用</h4>
+                        <span id="modalPackageFileInfo" class="package-file-info">Android 安装包</span>
+                    </div>
+                </div>
+
+                <!-- APK Section with QR code for phone install -->
+                <div class="package-apk-section hidden" id="modalApkSection" style="width: 100%; margin-top: 14px;">
+                    <div class="site-qrcode-card" style="background: #ffffff; padding: 14px; border-radius: 14px; box-shadow: 0 8px 24px rgba(0,0,0,0.18); display: flex; justify-content: center; align-items: center; margin: 0 auto 12px; width: fit-content;">
+                        <div id="modalApkQrcodeContainer" style="display: flex; justify-content: center; align-items: center; width: 170px; height: 170px;"></div>
+                    </div>
+                    <p style="font-size: 12px; color: var(--text-secondary); margin: 0 0 14px;">
+                        📱 手机直接使用浏览器或扫一扫，扫描上方二维码即刻下载安装
+                    </p>
+                    <a href="#" id="modalApkDownloadBtn" class="btn btn-primary" style="width: 100%; padding: 10px; font-size: 14px; display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none;" download>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        <span>直接下载 Android APK 安装包</span>
+                    </a>
+                </div>
+
+                <!-- EXE Section -->
+                <div class="package-exe-section hidden" id="modalExeSection" style="width: 100%; margin-top: 14px;">
+                    <div class="package-antivirus-alert" style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; text-align: left;">
+                        <div style="display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13px; color: #ef4444; margin-bottom: 5px;">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                            <span>下载前安全提示（必读）</span>
+                        </div>
+                        <p style="font-size: 12px; color: var(--text-secondary); margin: 0; line-height: 1.6;">
+                            <b style="color: var(--text-primary);">请暂时关闭杀毒软件或添加信任后再下载运行：</b><br>
+                            本程序由网页极速封装为单文件纯净应用，代码安全无毒。由于个人生成程序未购买昂贵的商业机构数字证书（EV签名），Windows Defender、360 等杀毒软件对未收录的单文件 EXE 极易产生安全误报，请放心信任使用。
+                        </p>
+                    </div>
+                    <a href="#" id="modalExeDownloadBtn" class="btn btn-primary" style="width: 100%; padding: 10px; font-size: 14px; display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none;" download>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        <span>立即下载 Windows 客户端 (.exe)</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Preview Modal -->
     <div class="modal-overlay hidden" id="previewModal">
         <div class="modal-container preview-container glass-panel">
@@ -568,6 +670,115 @@
                 <button class="announcement-confirm-btn" id="confirmAnnouncementBtn">我知道了</button>
             </div>
         </div>
+    </div>
+
+    <!-- Floating Customer Service Widget (悬浮客服与联系方式) -->
+    <div class="cs-floating-wrapper" id="csFloatingWrapper">
+        <!-- Popover Card -->
+        <div class="cs-popover-card glass-panel hidden" id="csPopoverCard">
+            <div class="cs-card-header">
+                <div class="cs-header-info">
+                    <div class="cs-avatar-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="cs-header-title-row">
+                            <h4 class="cs-title" id="csTitle">联系客服</h4>
+                            <span class="cs-online-badge"><span class="cs-online-dot"></span> 在线</span>
+                        </div>
+                        <p class="cs-subtitle" id="csSubtitle">遇到问题？欢迎联系我们</p>
+                    </div>
+                </div>
+                <button class="cs-close-btn" id="csCloseBtn" title="关闭" aria-label="关闭">&times;</button>
+            </div>
+
+            <!-- Contact Channels List -->
+            <div class="cs-channels-container" id="csChannelsContainer">
+                <!-- WeChat Channel -->
+                <div class="cs-channel-item" id="csWechatItem">
+                    <div class="cs-channel-head">
+                        <div class="cs-channel-icon wechat-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M8.5 2C4.36 2 1 4.91 1 8.5c0 1.94.94 3.69 2.45 4.88l-.63 2.37 2.76-1.38c.88.3 1.83.47 2.82.47.16 0 .32 0 .47-.02-.19-.58-.3-1.19-.3-1.82 0-3.37 3.36-6.1 7.5-6.1.33 0 .65.02.97.06C16.14 4.09 12.61 2 8.5 2zm-2.25 4c.69 0 1.25.56 1.25 1.25S6.94 8.5 6.25 8.5 5 7.94 5 7.25 5.56 6 6.25 6zm4.5 0c.69 0 1.25.56 1.25 1.25S11.44 8.5 10.75 8.5 9.5 7.94 9.5 7.25 10.06 6 10.75 6zM15.5 10c-3.59 0-6.5 2.46-6.5 5.5 0 1.68.88 3.19 2.27 4.22l-.54 2.03 2.37-1.18c.76.27 1.58.43 2.4.43 3.59 0 6.5-2.46 6.5-5.5S19.09 10 15.5 10zm-2 3.25c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm4 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1z"/>
+                            </svg>
+                        </div>
+                        <div class="cs-channel-meta">
+                            <span class="cs-channel-label">微信客服</span>
+                            <span class="cs-channel-val" id="csWechatVal">--</span>
+                        </div>
+                        <div class="cs-btn-group">
+                            <button class="cs-action-btn" id="csCopyWechatBtn" type="button" title="复制微信号">复制</button>
+                        </div>
+                    </div>
+                    <!-- WeChat QR Code Preview (if configured) -->
+                    <div class="cs-qrcode-wrap hidden" id="csWechatQrWrap">
+                        <img src="" alt="微信二维码" id="csWechatQrImg" class="cs-qrcode-img">
+                        <span class="cs-qrcode-tip">扫码或长按识别二维码</span>
+                    </div>
+                </div>
+
+                <!-- QQ Channel -->
+                <div class="cs-channel-item" id="csQqItem">
+                    <div class="cs-channel-head">
+                        <div class="cs-channel-icon qq-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 2C6.48 2 2 6.48 2 12c0 2.24.74 4.31 1.99 5.99L2.5 22l4.13-1.44C8.2 21.37 10.04 22 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm1 14h-2v-2h2v2zm0-4h-2V7h2v5z"/>
+                            </svg>
+                        </div>
+                        <div class="cs-channel-meta">
+                            <span class="cs-channel-label">QQ客服</span>
+                            <span class="cs-channel-val" id="csQqVal">--</span>
+                        </div>
+                        <div class="cs-btn-group">
+                            <a href="#" id="csDirectQqBtn" class="cs-action-btn cs-action-primary" target="_blank" rel="noopener">发起对话</a>
+                            <button class="cs-action-btn" id="csCopyQqBtn" type="button" title="复制 QQ 号">复制</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Email Channel -->
+                <div class="cs-channel-item" id="csEmailItem">
+                    <div class="cs-channel-head">
+                        <div class="cs-channel-icon email-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                                <polyline points="22,6 12,13 2,6"/>
+                            </svg>
+                        </div>
+                        <div class="cs-channel-meta">
+                            <span class="cs-channel-label">客服邮箱</span>
+                            <span class="cs-channel-val" id="csEmailVal">--</span>
+                        </div>
+                        <div class="cs-btn-group">
+                            <a href="#" id="csSendEmailBtn" class="cs-action-btn cs-action-primary">发送邮件</a>
+                            <button class="cs-action-btn" id="csCopyEmailBtn" type="button" title="复制邮箱">复制</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer / Work Hours Notice -->
+            <div class="cs-card-footer">
+                <span class="cs-footer-clock">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                </span>
+                <span class="cs-footer-notice" id="csNotice">工作时间：每天 09:00 - 23:00 快速响应</span>
+            </div>
+        </div>
+
+        <!-- Floating Action Button -->
+        <button class="cs-float-btn" id="csFloatBtn" title="联系客服" aria-label="联系客服">
+            <span class="cs-btn-pulse"></span>
+            <span class="cs-btn-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+            </span>
+            <span class="cs-btn-label">联系客服</span>
+            <span class="cs-unread-dot" id="csUnreadDot"></span>
+        </button>
     </div>
 
     <!-- Scripts -->
