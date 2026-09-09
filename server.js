@@ -322,6 +322,37 @@ function renderExpiredPage(subdomain, primaryDomain, expiresAt) {
   `;
 }
 
+function renderCleanedPage(subdomain, primaryDomain, deletedAt, reason) {
+  const domainText = subdomain ? (primaryDomain ? `${subdomain}.${primaryDomain}` : subdomain) : '';
+  return `
+    <!DOCTYPE html>
+    <html lang="zh-CN">
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <title>404 - 网页链接已被自动清理</title>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .card { text-align: center; padding: 40px; background: rgba(30, 41, 59, 0.85); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 16px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); max-width: 440px; width: 90%; }
+        h1 { font-size: 46px; margin: 0; color: #f59e0b; line-height: 1.2; }
+        h2 { font-size: 20px; margin: 12px 0 16px; font-weight: 600; color: #f8fafc; }
+        p { color: #94a3b8; font-size: 14px; margin-bottom: 8px; word-break: break-all; line-height: 1.6; }
+        .time { font-size: 13px; color: #f59e0b; background: rgba(245, 158, 11, 0.1); padding: 8px 12px; border-radius: 8px; margin-top: 16px; display: inline-block; }
+      </style>
+    </head>
+    <body>
+      <div class="card">
+        <h1>🗑️ 网页已清理</h1>
+        <h2>该网页因无访问记录已被自动清理</h2>
+        ${domainText ? `<p>访问域名: <strong>${domainText}</strong></p>` : ''}
+        <p>该网页在有效周期内无有效访问，根据系统资源回收策略，网址及源文件已自动安全清除。</p>
+        ${deletedAt ? `<div class="time">📅 清理时间: ${new Date(deletedAt).toLocaleString('zh-CN')}</div>` : ''}
+      </div>
+    </body>
+    </html>
+  `;
+}
+
 // ==================== Middleware ====================
 app.use(cors());
 app.use(express.json({ limit: '100mb' }));
@@ -678,6 +709,118 @@ async function deleteSiteFiles(siteId) {
   }
 }
 
+// ==================== Auto-Clean Inactive Sites Engine ====================
+function getAutoCleanConfig() {
+  const cfg = db.config.getAll();
+  // Ensure baseline observation timestamp is persisted so existing historical sites are protected
+  let baselineTimeStr = cfg.autoCleanBaselineTime;
+  if (!baselineTimeStr) {
+    baselineTimeStr = new Date().toISOString();
+    try {
+      db.config.set('autoCleanBaselineTime', baselineTimeStr);
+    } catch (_) {}
+  }
+  const baselineTime = new Date(baselineTimeStr).getTime() || Date.now();
+
+  return {
+    enabled: cfg.autoCleanEnabled === undefined ? true : String(cfg.autoCleanEnabled) === 'true',
+    periodDays: cfg.autoCleanPeriodDays !== undefined && !isNaN(Number(cfg.autoCleanPeriodDays)) ? Number(cfg.autoCleanPeriodDays) : 7,
+    minVisits: cfg.autoCleanMinVisits !== undefined && !isNaN(Number(cfg.autoCleanMinVisits)) ? Number(cfg.autoCleanMinVisits) : 1,
+    protectActiveCard: cfg.autoCleanProtectActiveCard === undefined ? true : String(cfg.autoCleanProtectActiveCard) === 'true',
+    baselineTime,
+    baselineTimeStr
+  };
+}
+
+async function executeAutoCleanSites({ force = false } = {}) {
+  const cfg = getAutoCleanConfig();
+  if (!force && !cfg.enabled) {
+    return { success: true, count: 0, sites: [], message: '周期无访问自动清理未启用' };
+  }
+
+  const periodDays = Math.max(0.01, cfg.periodDays);
+  const periodMs = periodDays * 24 * 60 * 60 * 1000;
+  const now = Date.now();
+
+  const candidates = db.sites.getSitesForAutoClean();
+  const cleaned = [];
+
+  for (const site of candidates) {
+    if (site.status === 'auto_deleted') continue;
+
+    // 1. Protection for sites with active, unexpired card key validity
+    if (cfg.protectActiveCard) {
+      const exp = getSiteEffectiveExpiration(site);
+      if (!exp.isExpired) {
+        // Site subscription/card key is still within valid period!
+        // Exempted from auto-clean while subscription is active!
+        continue;
+      }
+    }
+
+    // 2. Determine safe observation start timestamp:
+    // If site has a recorded lastVisitedAt, count inactivity since that visit.
+    // If site has NO recorded lastVisitedAt (historical site or newly deployed):
+    // Reference time MUST NOT be earlier than cfg.baselineTime!
+    // This gives all pre-existing historical links a full grace period from feature rollout time.
+    let refTime;
+    if (site.lastVisitedAt) {
+      refTime = new Date(site.lastVisitedAt).getTime();
+    } else {
+      const createdTime = site.createdAt ? new Date(site.createdAt).getTime() : 0;
+      refTime = Math.max(createdTime || 0, cfg.baselineTime);
+    }
+
+    if (!refTime || isNaN(refTime)) continue;
+
+    const inactiveMs = now - refTime;
+    const visits = Number(site.visits) || 0;
+
+    // 3. Clean criteria:
+    // Observation period elapsed (inactiveMs >= periodMs) AND visits < minVisits
+    const isInactiveOverdue = inactiveMs >= periodMs;
+    const hasInsufficientVisits = visits < cfg.minVisits;
+
+    if (isInactiveOverdue && hasInsufficientVisits) {
+      try {
+        console.log(`[AutoClean] 正在清理站点「${site.siteId}」: 观察周期 ${periodDays} 天内无有效访问 (累计访问: ${visits}, 空闲: ${(inactiveMs / (1000 * 3600 * 24)).toFixed(1)} 天)`);
+
+        // Physically delete files from R2 and Local directory
+        await deleteSiteFiles(site.siteId);
+
+        // Mark database record as auto_deleted (keeps audit record for admin panel only)
+        const reason = `观察周期 ${periodDays} 天内无有效访问 (累计访问: ${visits} 次)`;
+        db.sites.markAutoDeleted(site.siteId, reason);
+
+        cleaned.push({
+          siteId: site.siteId,
+          subdomain: site.subdomain,
+          url: site.url,
+          visits,
+          lastVisitedAt: site.lastVisitedAt,
+          createdAt: site.createdAt,
+          reason
+        });
+      } catch (err) {
+        console.error(`[AutoClean] 清理站点「${site.siteId}」失败:`, err.message);
+      }
+    }
+  }
+
+  if (cleaned.length > 0) {
+    console.log(`[AutoClean] 巡检完成，共下线并删除 ${cleaned.length} 个无访问站点的源文件。`);
+  }
+
+  return {
+    success: true,
+    count: cleaned.length,
+    sites: cleaned,
+    periodDays,
+    checkedCount: candidates.length,
+    baselineTime: cfg.baselineTimeStr
+  };
+}
+
 // ==================== Subdomain Dynamic Router ====================
 app.use(async (req, res, next) => {
   const hostHeader = (req.headers.host || '').split(':')[0].toLowerCase();
@@ -729,7 +872,12 @@ app.use(async (req, res, next) => {
     `);
   }
 
-  // Expiration Check (synchronized with card key validity)
+  // 1. Auto-Cleaned Check (inactive for specified period)
+  if (site.status === 'auto_deleted') {
+    return res.status(404).send(renderCleanedPage(subdomain, primaryDomain, site.deletedAt, site.deleteReason));
+  }
+
+  // 2. Expiration Check (synchronized with card key validity)
   const siteExp = getSiteEffectiveExpiration(site);
   if (siteExp.isExpired) {
     return res.status(410).send(renderExpiredPage(subdomain, primaryDomain, siteExp.expiresAt));
@@ -740,25 +888,25 @@ app.use(async (req, res, next) => {
     reqPath = '/index.html';
   }
 
-  // Record visit analytics for page access
-  if (reqPath === '/index.html' || reqPath === '/') {
-    try {
-      db.sites.incrementVisits(site.siteId);
-    } catch (_) {}
-  }
-
+  const isMainPage = reqPath === '/index.html';
   const fileRelativePath = reqPath.replace(/^\/+/, '');
   const key = `sites/${site.siteId}/${fileRelativePath}`;
 
   if (site.storage === 'local' || !isR2Configured()) {
     const localFilePath = path.join(LOCAL_SITES_DIR, key);
     if (fs.existsSync(localFilePath) && fs.statSync(localFilePath).isFile()) {
+      if (isMainPage) {
+        try { db.sites.recordSuccessVisit(site.siteId); } catch (_) {}
+      }
       const contentType = mime.lookup(localFilePath) || 'application/octet-stream';
       res.setHeader('Content-Type', contentType.startsWith('text/html') ? 'text/html; charset=utf-8' : contentType);
       return fs.createReadStream(localFilePath).pipe(res);
     } else if (fileRelativePath !== 'index.html') {
       const indexPath = path.join(LOCAL_SITES_DIR, `sites/${site.siteId}/index.html`);
       if (fs.existsSync(indexPath)) {
+        if (isMainPage) {
+          try { db.sites.recordSuccessVisit(site.siteId); } catch (_) {}
+        }
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         return fs.createReadStream(indexPath).pipe(res);
       }
@@ -766,6 +914,9 @@ app.use(async (req, res, next) => {
     return res.status(404).send('404 File Not Found');
   } else {
     // Transparently stream directly from R2 - URL in browser stays on custom subdomain permanently!
+    if (isMainPage) {
+      try { db.sites.recordSuccessVisit(site.siteId); } catch (_) {}
+    }
     return serveR2File(res, site.siteId, fileRelativePath, req);
   }
 });
@@ -775,13 +926,20 @@ app.use('/_sites/sites/:siteId', async (req, res, next) => {
   const { siteId } = req.params;
   const site = db.sites.findByDomainOrId(siteId);
   if (site) {
+    const { primaryDomain } = getDomainConfig();
+    if (site.status === 'auto_deleted') {
+      return res.status(404).send(renderCleanedPage(site.subdomain || site.siteId, primaryDomain, site.deletedAt, site.deleteReason));
+    }
     const siteExp = getSiteEffectiveExpiration(site);
     if (siteExp.isExpired) {
-      const { primaryDomain } = getDomainConfig();
       return res.status(410).send(renderExpiredPage(site.subdomain || site.siteId, primaryDomain, siteExp.expiresAt));
     }
+    let subPath = req.path.replace(/^\/+/, '') || 'index.html';
+    const isMain = subPath === 'index.html' || subPath === '';
+    if (isMain) {
+      try { db.sites.recordSuccessVisit(site.siteId); } catch (_) {}
+    }
     if (site.storage === 'r2' && isR2Configured()) {
-      let subPath = req.path.replace(/^\/+/, '') || 'index.html';
       return serveR2File(res, site.siteId, subPath, req);
     }
   }
@@ -2072,11 +2230,121 @@ app.get('/api/admin/sites', (req, res) => {
       duration: exp.duration,
       expiresAt: exp.expiresAt,
       url: s.url || buildSiteUrl(s.subdomain || s.siteId, s.siteId),
-      isExpired: exp.isExpired
+      isExpired: exp.isExpired,
+      status: s.status || 'active',
+      visits: Number(s.visits) || 0,
+      lastVisitedAt: s.lastVisitedAt || null,
+      deletedAt: s.deletedAt || null,
+      deleteReason: s.deleteReason || null
     };
   });
 
   return res.json({ success: true, data: { sites: enrichedSites } });
+});
+
+// --- Admin: Get Auto-Clean Config & Stats ---
+app.get('/api/admin/auto-clean-config', (req, res) => {
+  const { password } = req.query;
+
+  if (password !== ADMIN_PASSWORD) {
+    return res.status(403).json({ success: false, message: '管理员密码错误' });
+  }
+
+  const config = getAutoCleanConfig();
+  const allSites = db.sites.getAll();
+  const autoDeletedCount = allSites.filter(s => s.status === 'auto_deleted').length;
+  const activeCount = allSites.filter(s => s.status !== 'auto_deleted').length;
+
+  return res.json({
+    success: true,
+    data: {
+      config,
+      stats: {
+        totalSites: allSites.length,
+        activeSites: activeCount,
+        autoDeletedSites: autoDeletedCount
+      }
+    }
+  });
+});
+
+// --- Admin: Save Auto-Clean Config ---
+app.post('/api/admin/auto-clean-config', (req, res) => {
+  const { password, enabled, periodDays, minVisits, protectActiveCard } = req.body || {};
+
+  if (password !== ADMIN_PASSWORD) {
+    return res.status(403).json({ success: false, message: '管理员密码错误' });
+  }
+
+  const updates = {};
+  if (enabled !== undefined) updates.autoCleanEnabled = String(enabled);
+  if (periodDays !== undefined) updates.autoCleanPeriodDays = String(Math.max(0.1, Number(periodDays) || 7));
+  if (minVisits !== undefined) updates.autoCleanMinVisits = String(Math.max(1, Number(minVisits) || 1));
+  if (protectActiveCard !== undefined) updates.autoCleanProtectActiveCard = String(protectActiveCard);
+
+  db.config.setMultiple(updates);
+
+  return res.json({
+    success: true,
+    message: '无访问自动清理策略已保存',
+    data: getAutoCleanConfig()
+  });
+});
+
+// --- Admin: Trigger Auto-Clean Run Immediately ---
+app.post('/api/admin/auto-clean-run', async (req, res) => {
+  try {
+    const { password, force = true } = req.body || {};
+
+    if (password !== ADMIN_PASSWORD) {
+      return res.status(403).json({ success: false, message: '管理员密码错误' });
+    }
+
+    const result = await executeAutoCleanSites({ force: Boolean(force) });
+    return res.json({
+      success: true,
+      message: result.count > 0 
+        ? `巡检完成：成功清理 ${result.count} 个无有效访问站点及源文件` 
+        : '巡检完成：未发现需要清理的无访问站点',
+      data: result
+    });
+  } catch (err) {
+    console.error('Admin auto-clean run error:', err);
+    return res.status(500).json({ success: false, message: '执行清理失败: ' + err.message });
+  }
+});
+
+// --- Admin: Restore Auto-Deleted Site ---
+app.post('/api/admin/site-restore', (req, res) => {
+  try {
+    const { password, siteId } = req.body || {};
+
+    if (password !== ADMIN_PASSWORD) {
+      return res.status(403).json({ success: false, message: '管理员密码错误' });
+    }
+
+    if (!siteId) {
+      return res.status(400).json({ success: false, message: '请提供站点 ID' });
+    }
+
+    const targetSite = db.sites.getById(siteId);
+    if (!targetSite) {
+      return res.status(404).json({ success: false, message: '未找到指定站点' });
+    }
+
+    const ok = db.sites.restoreSite(siteId);
+    if (ok) {
+      return res.json({
+        success: true,
+        message: `站点「${siteId}」已成功恢复为正常运行状态！`
+      });
+    } else {
+      return res.status(500).json({ success: false, message: '恢复失败' });
+    }
+  } catch (err) {
+    console.error('Admin restore site error:', err);
+    return res.status(500).json({ success: false, message: '恢复异常: ' + err.message });
+  }
 });
 
 // --- Admin: Delete Site ---
@@ -2662,4 +2930,12 @@ app.listen(PORT, () => {
   console.log(`  🌐 地址: http://localhost:${PORT}`);
   console.log(`  💾 存储模式: ${isR2Configured() ? 'Cloudflare R2' : '本地存储（演示模式）'}`);
   console.log(`  🔑 管理密码: ${ADMIN_PASSWORD}\n`);
+
+  // Auto-clean background scheduler: 10s initial delay, then inspect every 1 hour
+  setTimeout(() => {
+    executeAutoCleanSites().catch(e => console.error('[AutoClean] 启动初次巡检异常:', e.message));
+  }, 10000);
+  setInterval(() => {
+    executeAutoCleanSites().catch(e => console.error('[AutoClean] 定时巡检异常:', e.message));
+  }, 60 * 60 * 1000);
 });

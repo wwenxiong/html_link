@@ -67,6 +67,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const searchSiteInput = document.getElementById('searchSiteInput');
     const refreshSitesBtn = document.getElementById('refreshSitesBtn');
     const siteFilterTabs = document.querySelectorAll('#siteFilterTabs .filter-tab');
+    const siteStatCleaned = document.getElementById('siteStatCleaned');
+    const siteCountCleaned = document.getElementById('siteCountCleaned');
+    const triggerAutoCleanBtn = document.getElementById('triggerAutoCleanBtn');
+    const overviewAutoCleanStatus = document.getElementById('overviewAutoCleanStatus');
+    const autoCleanAuditStats = document.getElementById('autoCleanAuditStats');
+    const autoCleanEnabledSelect = document.getElementById('autoCleanEnabledSelect');
+    const autoCleanPeriodDaysInput = document.getElementById('autoCleanPeriodDaysInput');
+    const autoCleanMinVisitsInput = document.getElementById('autoCleanMinVisitsInput');
+    const autoCleanProtectActiveCardSelect = document.getElementById('autoCleanProtectActiveCardSelect');
+    const autoCleanBaselineDisplay = document.getElementById('autoCleanBaselineDisplay');
+    const saveAutoCleanConfigBtn = document.getElementById('saveAutoCleanConfigBtn');
+    const modalTriggerAutoCleanBtn = document.getElementById('modalTriggerAutoCleanBtn');
 
     // R2 & Domain
     const saveR2ConfigBtn = document.getElementById('saveR2ConfigBtn');
@@ -235,7 +247,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ---- Load & Refresh Data ----
     async function refreshAllData() {
-        await Promise.all([fetchKeys(), fetchSites()]);
+        await Promise.all([fetchKeys(), fetchSites(), fetchAutoCleanConfig()]);
     }
 
     async function fetchKeys() {
@@ -258,6 +270,111 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (e) {
             console.warn('Failed to fetch sites:', e.message);
+        }
+    }
+
+    async function fetchAutoCleanConfig() {
+        try {
+            const data = await safeFetchJson(`/api/admin/auto-clean-config?password=${encodeURIComponent(adminPassword)}`);
+            if (data.success && data.data) {
+                const { config, stats } = data.data;
+                if (autoCleanEnabledSelect) {
+                    autoCleanEnabledSelect.value = config.enabled ? 'true' : 'false';
+                }
+                if (autoCleanPeriodDaysInput) {
+                    autoCleanPeriodDaysInput.value = config.periodDays || 7;
+                }
+                if (autoCleanMinVisitsInput) {
+                    autoCleanMinVisitsInput.value = config.minVisits || 1;
+                }
+                if (autoCleanProtectActiveCardSelect && config.protectActiveCard !== undefined) {
+                    autoCleanProtectActiveCardSelect.value = config.protectActiveCard ? 'true' : 'false';
+                }
+                if (autoCleanBaselineDisplay && config.autoCleanBaselineTime) {
+                    autoCleanBaselineDisplay.textContent = `保护基准: ${formatDate(config.autoCleanBaselineTime)}`;
+                }
+                if (overviewAutoCleanStatus) {
+                    overviewAutoCleanStatus.textContent = config.enabled 
+                        ? `${config.periodDays}天无访问自动清理 (已清理${stats.autoDeletedSites}个)` 
+                        : '功能已停用';
+                }
+                if (autoCleanAuditStats) {
+                    autoCleanAuditStats.textContent = `已自动清理：${stats.autoDeletedSites} 个站点 (活跃 ${stats.activeSites} 个)`;
+                }
+            }
+        } catch (e) {
+            console.warn('Failed to fetch auto-clean config:', e.message);
+        }
+    }
+
+    async function saveAutoCleanConfig() {
+        if (!saveAutoCleanConfigBtn) return;
+        saveAutoCleanConfigBtn.disabled = true;
+        saveAutoCleanConfigBtn.textContent = '保存中...';
+
+        try {
+            const enabled = autoCleanEnabledSelect ? autoCleanEnabledSelect.value === 'true' : true;
+            const periodDays = autoCleanPeriodDaysInput ? parseFloat(autoCleanPeriodDaysInput.value) : 7;
+            const minVisits = autoCleanMinVisitsInput ? parseInt(autoCleanMinVisitsInput.value, 10) : 1;
+            const protectActiveCard = autoCleanProtectActiveCardSelect ? autoCleanProtectActiveCardSelect.value === 'true' : true;
+
+            const res = await safeFetchJson('/api/admin/auto-clean-config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    password: adminPassword,
+                    enabled,
+                    periodDays,
+                    minVisits,
+                    protectActiveCard
+                })
+            });
+
+            if (res.success) {
+                showToast('自动清理策略已成功保存！', 'success');
+                await Promise.all([fetchAutoCleanConfig(), fetchSites()]);
+            } else {
+                showToast(res.message || '保存失败', 'error');
+            }
+        } catch (e) {
+            showToast('保存异常: ' + e.message, 'error');
+        } finally {
+            saveAutoCleanConfigBtn.disabled = false;
+            saveAutoCleanConfigBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 4px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>保存清理策略`;
+        }
+    }
+
+    async function triggerAutoCleanRun(btnEl) {
+        if (btnEl) {
+            btnEl.disabled = true;
+            btnEl.dataset.origHtml = btnEl.innerHTML;
+            btnEl.textContent = '巡检执行中...';
+        }
+
+        try {
+            const res = await safeFetchJson('/api/admin/auto-clean-run', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    password: adminPassword,
+                    force: true
+                })
+            });
+
+            if (res.success) {
+                const count = res.data ? res.data.count : 0;
+                showToast(res.message || `巡检完成，已清理 ${count} 个无访问站点`, count > 0 ? 'warning' : 'success');
+                await Promise.all([fetchSites(), fetchAutoCleanConfig()]);
+            } else {
+                showToast(res.message || '巡检执行失败', 'error');
+            }
+        } catch (e) {
+            showToast('巡检异常: ' + e.message, 'error');
+        } finally {
+            if (btnEl) {
+                btnEl.disabled = false;
+                btnEl.innerHTML = btnEl.dataset.origHtml || '立即巡检清理';
+            }
         }
     }
 
@@ -400,18 +517,21 @@ document.addEventListener('DOMContentLoaded', () => {
     // ---- Render Sites Table & Stats ----
     function updateSiteStatsAndTable() {
         const total = allSites.length;
-        const active = allSites.filter(s => !s.isExpired).length;
-        const expired = allSites.filter(s => s.isExpired).length;
+        const cleaned = allSites.filter(s => s.status === 'auto_deleted').length;
+        const active = allSites.filter(s => s.status !== 'auto_deleted' && !s.isExpired).length;
+        const expired = allSites.filter(s => s.status !== 'auto_deleted' && s.isExpired).length;
         const r2Count = allSites.filter(s => s.storage === 'r2').length;
 
         if (siteStatTotal) siteStatTotal.textContent = total;
         if (siteStatActive) siteStatActive.textContent = active;
         if (siteStatExpired) siteStatExpired.textContent = expired;
+        if (siteStatCleaned) siteStatCleaned.textContent = cleaned;
         if (siteStatR2) siteStatR2.textContent = r2Count;
 
         if (siteCountAll) siteCountAll.textContent = total;
         if (siteCountActive) siteCountActive.textContent = active;
         if (siteCountExpired) siteCountExpired.textContent = expired;
+        if (siteCountCleaned) siteCountCleaned.textContent = cleaned;
 
         renderSitesTable();
     }
@@ -422,9 +542,11 @@ document.addEventListener('DOMContentLoaded', () => {
         let filtered = allSites;
 
         if (currentSiteFilter === 'active') {
-            filtered = filtered.filter(s => !s.isExpired);
+            filtered = filtered.filter(s => s.status !== 'auto_deleted' && !s.isExpired);
         } else if (currentSiteFilter === 'expired') {
-            filtered = filtered.filter(s => s.isExpired);
+            filtered = filtered.filter(s => s.status !== 'auto_deleted' && s.isExpired);
+        } else if (currentSiteFilter === 'cleaned') {
+            filtered = filtered.filter(s => s.status === 'auto_deleted');
         }
 
         if (searchSiteQuery) {
@@ -435,20 +557,34 @@ document.addEventListener('DOMContentLoaded', () => {
                 (s.siteId && s.siteId.toLowerCase().includes(q)) ||
                 (s.url && s.url.toLowerCase().includes(q)) ||
                 (s.userEmail && s.userEmail.toLowerCase().includes(q)) ||
-                (s.cdkey && s.cdkey.toLowerCase().includes(q))
+                (s.cdkey && s.cdkey.toLowerCase().includes(q)) ||
+                (s.deleteReason && s.deleteReason.toLowerCase().includes(q))
             );
         }
 
         if (filtered.length === 0) {
-            sitesTableBody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-secondary); padding: 30px;">无匹配站点记录</td></tr>`;
+            sitesTableBody.innerHTML = `<tr><td colspan="10" style="text-align: center; color: var(--text-secondary); padding: 30px;">无匹配站点记录</td></tr>`;
             return;
         }
 
         sitesTableBody.innerHTML = filtered.map(s => {
+            const isCleaned = s.status === 'auto_deleted';
             const isExp = s.isExpired;
-            const statusBadge = isExp 
-                ? '<span class="badge badge-expired">已到期失效</span>'
-                : '<span class="badge badge-used">正常运行中</span>';
+
+            let statusBadge = '';
+            if (isCleaned) {
+                const reasonTip = s.deleteReason ? escapeHtml(s.deleteReason) : '长期无访问源文件已清理';
+                statusBadge = `
+                    <div style="display: inline-flex; flex-direction: column; gap: 2px;">
+                        <span class="badge" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.35);" title="${reasonTip}">无访问已清理</span>
+                        <span style="font-size: 10.5px; color: var(--text-muted); white-space: nowrap;">源文件已清除</span>
+                    </div>
+                `;
+            } else if (isExp) {
+                statusBadge = '<span class="badge badge-expired">已到期失效</span>';
+            } else {
+                statusBadge = '<span class="badge badge-used">正常运行中</span>';
+            }
 
             const storageBadge = s.storage === 'r2' 
                 ? '<span class="badge badge-duration" style="background: rgba(10, 132, 255, 0.12); color: var(--mac-blue);">Cloudflare R2</span>'
@@ -458,22 +594,55 @@ document.addEventListener('DOMContentLoaded', () => {
                 ? `<span style="color: var(--mac-purple); font-weight: 500; font-size: 12px; display:inline-flex; align-items:center; gap:3px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>${escapeHtml(s.userEmail)}</span>` 
                 : (s.userId ? `<span style="color: var(--text-secondary); font-size: 11px;">ID: ${escapeHtml(s.userId.slice(-8))}</span>` : '<span style="color: var(--text-muted); font-size: 12px;">历史未关联</span>');
 
+            const visits = Number(s.visits) || 0;
+            const lastVisit = s.lastVisitedAt 
+                ? formatDate(s.lastVisitedAt) 
+                : '<span style="color: var(--text-muted); font-size: 11px;">从未访问</span>';
+
+            const visitsDisplay = `
+                <div style="display: flex; flex-direction: column; gap: 2px;">
+                    <span style="font-weight: 700; color: ${visits > 0 ? 'var(--mac-blue)' : 'var(--text-muted)'}; font-size: 12px; display: inline-flex; align-items: center; gap: 4px;">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        ${visits} 次
+                    </span>
+                    <span style="font-size: 11px; color: var(--text-secondary); white-space: nowrap;" title="最后访问时间: ${s.lastVisitedAt ? formatDate(s.lastVisitedAt) : '无'}">
+                        ${lastVisit}
+                    </span>
+                </div>
+            `;
+
+            const urlLink = isCleaned
+                ? `<span style="text-decoration: line-through; color: var(--text-muted); font-size: 12px;" title="网址已下线且源文件已删除">${escapeHtml(s.url)}</span>`
+                : `<a href="${s.url}" target="_blank">${escapeHtml(s.url)}</a>`;
+
             return `
-                <tr>
-                    <td style="font-weight: 600; color: var(--text-primary);">${escapeHtml(s.subdomain || s.customPath || s.siteId)}</td>
-                    <td><a href="${s.url}" target="_blank">${escapeHtml(s.url)}</a></td>
+                <tr style="${isCleaned ? 'background: rgba(245, 158, 11, 0.03);' : ''}">
+                    <td style="font-weight: 600; color: ${isCleaned ? 'var(--text-secondary)' : 'var(--text-primary)'};">
+                        ${escapeHtml(s.subdomain || s.customPath || s.siteId)}
+                    </td>
+                    <td>${urlLink}</td>
+                    <td>${visitsDisplay}</td>
                     <td>${userDisplay}</td>
                     <td style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--text-secondary);">${escapeHtml(s.cdkey || '-')}</td>
                     <td><span class="badge badge-duration">${formatDuration(s.duration)}</span></td>
                     <td>${storageBadge}</td>
-                    <td style="color: var(--text-secondary);">${formatDate(s.createdAt)}</td>
+                    <td style="color: var(--text-secondary); font-size: 11.5px;">${formatDate(s.createdAt)}</td>
                     <td>${statusBadge}</td>
-                    <td style="text-align: right;">
-                        <button class="action-icon-btn danger delete-site-btn" data-siteid="${s.siteId}" title="删除站点文件与记录"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+                    <td style="text-align: right; white-space: nowrap;">
+                        ${isCleaned ? `
+                            <button class="action-icon-btn restore-site-btn" data-siteid="${s.siteId}" title="恢复该站点为正常运行状态" style="color: #10b981; margin-right: 4px;">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                            </button>
+                        ` : ''}
+                        <button class="action-icon-btn danger delete-site-btn" data-siteid="${s.siteId}" title="彻底从数据库清除记录"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
                     </td>
                 </tr>
             `;
         }).join('');
+
+        sitesTableBody.querySelectorAll('.restore-site-btn').forEach(btn => {
+            btn.addEventListener('click', () => restoreSingleSite(btn.dataset.siteid));
+        });
 
         sitesTableBody.querySelectorAll('.delete-site-btn').forEach(btn => {
             btn.addEventListener('click', () => deleteSingleSite(btn.dataset.siteid));
@@ -528,6 +697,18 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast('站点列表已刷新', 'success');
             refreshSitesBtn.disabled = false;
         });
+    }
+
+    if (triggerAutoCleanBtn) {
+        triggerAutoCleanBtn.addEventListener('click', () => triggerAutoCleanRun(triggerAutoCleanBtn));
+    }
+
+    if (modalTriggerAutoCleanBtn) {
+        modalTriggerAutoCleanBtn.addEventListener('click', () => triggerAutoCleanRun(modalTriggerAutoCleanBtn));
+    }
+
+    if (saveAutoCleanConfigBtn) {
+        saveAutoCleanConfigBtn.addEventListener('click', () => saveAutoCleanConfig());
     }
 
     // ---- Custom Max Uses Input Toggle ----
@@ -971,6 +1152,26 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (e) {
             showToast('删除站点失败', 'error');
+        }
+    }
+
+    async function restoreSingleSite(siteId) {
+        if (!confirm(`确定要恢复站点「${siteId}」为正常运行状态吗？`)) return;
+        try {
+            const response = await fetch('/api/admin/site-restore', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ siteId, password: adminPassword })
+            });
+            const data = await response.json();
+            if (data.success) {
+                showToast(data.message || '站点已成功恢复为正常运行状态！', 'success');
+                await refreshAllData();
+            } else {
+                showToast(data.message || '恢复失败', 'error');
+            }
+        } catch (e) {
+            showToast('恢复站点请求失败: ' + e.message, 'error');
         }
     }
 
