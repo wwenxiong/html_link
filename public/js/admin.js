@@ -171,30 +171,43 @@ document.addEventListener('DOMContentLoaded', () => {
         return dur || '标准';
     }
 
+    const ADMIN_STORAGE_KEY = 'html_link_admin_pwd';
+
     // ---- Login ----
-    adminLoginBtn.addEventListener('click', doLogin);
+    adminLoginBtn.addEventListener('click', () => doLogin());
     adminPwdInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') doLogin();
     });
 
-    async function doLogin() {
-        const pwd = adminPwdInput.value.trim();
+    async function doLogin(customPwd = null, isAuto = false) {
+        const pwd = (typeof customPwd === 'string' ? customPwd : adminPwdInput.value).trim();
         if (!pwd) {
-            showToast('请输入密码', 'error');
+            if (!isAuto) showToast('请输入密码', 'error');
+            document.documentElement.classList.remove('admin-has-session');
+            loginSection.classList.remove('hidden');
             return;
         }
 
-        adminLoginBtn.disabled = true;
-        adminLoginBtn.textContent = '登录中...';
+        if (!isAuto) {
+            adminLoginBtn.disabled = true;
+            adminLoginBtn.textContent = '登录中...';
+        }
 
         try {
             adminPassword = pwd;
             await refreshAllData();
 
+            // 保存密码至本地存储，支持刷新页面保持登录状态
+            localStorage.setItem(ADMIN_STORAGE_KEY, pwd);
+            sessionStorage.setItem(ADMIN_STORAGE_KEY, pwd);
+
+            document.documentElement.classList.remove('admin-has-session');
             loginSection.classList.add('hidden');
             dashboardSection.classList.remove('hidden');
             headerActions.style.display = 'flex';
-            showToast('登录成功', 'success');
+            if (!isAuto) {
+                showToast('登录成功', 'success');
+            }
 
             loadR2Config();
             loadDomainConfig();
@@ -205,21 +218,56 @@ document.addEventListener('DOMContentLoaded', () => {
             loadHealthStatus();
         } catch (error) {
             adminPassword = '';
-            showToast(error.message || '密码错误', 'error');
+            localStorage.removeItem(ADMIN_STORAGE_KEY);
+            sessionStorage.removeItem(ADMIN_STORAGE_KEY);
+            document.documentElement.classList.remove('admin-has-session');
+            dashboardSection.classList.add('hidden');
+            loginSection.classList.remove('hidden');
+            headerActions.style.display = 'none';
+            if (!isAuto) {
+                showToast(error.message || '密码错误', 'error');
+            } else {
+                console.warn('Auto-login failed with saved credentials:', error.message);
+                showToast('登录凭证已失效，请重新输入密码', 'warning');
+            }
         } finally {
-            adminLoginBtn.disabled = false;
-            adminLoginBtn.textContent = '登 录';
+            if (!isAuto) {
+                adminLoginBtn.disabled = false;
+                adminLoginBtn.textContent = '登 录';
+            }
         }
     }
 
     logoutBtn.addEventListener('click', () => {
         adminPassword = '';
+        localStorage.removeItem(ADMIN_STORAGE_KEY);
+        sessionStorage.removeItem(ADMIN_STORAGE_KEY);
+        document.documentElement.classList.remove('admin-has-session');
         dashboardSection.classList.add('hidden');
         loginSection.classList.remove('hidden');
         headerActions.style.display = 'none';
         adminPwdInput.value = '';
         showToast('已退出登录', 'info');
     });
+
+    function handleAuthFailure() {
+        adminPassword = '';
+        localStorage.removeItem(ADMIN_STORAGE_KEY);
+        sessionStorage.removeItem(ADMIN_STORAGE_KEY);
+        document.documentElement.classList.remove('admin-has-session');
+        dashboardSection.classList.add('hidden');
+        loginSection.classList.remove('hidden');
+        headerActions.style.display = 'none';
+    }
+
+    // 页面初次加载时检查本地存储，若有保存凭据则自动静默登录（刷新不退出）
+    const savedAdminPwd = localStorage.getItem(ADMIN_STORAGE_KEY) || sessionStorage.getItem(ADMIN_STORAGE_KEY);
+    if (savedAdminPwd) {
+        adminPwdInput.value = savedAdminPwd;
+        doLogin(savedAdminPwd, true);
+    } else {
+        document.documentElement.classList.remove('admin-has-session');
+    }
 
     // Safe JSON Fetch Helper with robust error handling
     async function safeFetchJson(url, options = {}) {
@@ -228,12 +276,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (contentType.includes('application/json')) {
             const data = await response.json();
             if (!response.ok || data.success === false) {
+                if (response.status === 401 || response.status === 403) {
+                    handleAuthFailure();
+                }
                 throw new Error(data.message || `请求失败 (${response.status})`);
             }
             return data;
         }
         const text = await response.text();
         if (response.status === 401 || response.status === 403) {
+            handleAuthFailure();
             throw new Error('管理员密码错误，请重新输入');
         }
         if (response.status === 502 || response.status === 504) {

@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css?v=2.4">
-    <!-- Anti-flicker Theme Init Script -->
+    <!-- Anti-flicker Theme & Auth Session Init Script -->
     <script>
         (function() {
             try {
@@ -20,9 +20,19 @@
                 const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
                 const theme = savedTheme ? savedTheme : (prefersDark ? 'dark' : 'light');
                 document.documentElement.setAttribute('data-theme', theme);
+
+                const savedAdminPwd = localStorage.getItem('html_link_admin_pwd') || sessionStorage.getItem('html_link_admin_pwd');
+                if (savedAdminPwd) {
+                    document.documentElement.classList.add('admin-has-session');
+                }
             } catch (e) {}
         })();
     </script>
+    <style>
+        html.admin-has-session #loginSection {
+            display: none !important;
+        }
+    </style>
 </head>
 <body class="admin-page">
     <!-- Background Effects -->
@@ -932,6 +942,6 @@ HTML-WDU3-P3MX-26B4-RWFH,1y,0"></textarea>
         </div>
     </footer>
 
-    <script src="js/admin.js?v=3.1"></script>
+    <script src="js/admin.js?v=3.2"></script>
 </body>
 </html>
